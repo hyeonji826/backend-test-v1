@@ -1,0 +1,12 @@
+spring:
+  datasource:
+    url: jdbc:mariadb://localhost:3306/payments
+    username: appuser
+    password: app1234
+    driver-class-name: org.mariadb.jdbc.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MariaDBDialect

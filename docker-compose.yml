@@ -1,0 +1,24 @@
+version: "3.9"
+
+services:
+  mariadb:
+    image: mariadb:10.11
+    container_name: mariadb
+    restart: always
+    environment:
+      MARIADB_ROOT_PASSWORD: root-pass
+      MARIADB_DATABASE: appdb
+      MARIADB_USER: appuser
+      MARIADB_PASSWORD: app-pass
+    ports:
+      - "3306:3306"
+    volumes:
+      - dbdata:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot-pass"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  dbdata:
