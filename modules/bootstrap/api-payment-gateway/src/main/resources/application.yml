@@ -20,4 +20,4 @@ springdoc:
     enabled: true
   swagger-ui:
     enabled: true
-    path: /swagger-ui.html
+    # Use default path (/swagger-ui/index.html); leaving path unset to avoid 404s
