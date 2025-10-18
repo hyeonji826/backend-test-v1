@@ -12,7 +12,10 @@
 **한 줄 실행**
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\docker-e2e.ps1
+
 Invoke-RestMethod http://localhost:18080/__admin/requests | ConvertTo-Json -Depth 6
+```
+
 2. 실행 환경
 Docker / Docker Compose
 
