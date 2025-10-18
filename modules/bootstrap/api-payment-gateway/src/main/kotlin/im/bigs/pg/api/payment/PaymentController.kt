@@ -42,12 +42,12 @@ class PaymentController(
      * @return 생성된 결제 요약 응답
      */
     @PostMapping
-    fun create(@RequestBody req: CreatePaymentRequest): ResponseEntity<PaymentResponse> {
+    fun create(@RequestBody @jakarta.validation.Valid req: CreatePaymentRequest): ResponseEntity<PaymentResponse> {
         val saved = paymentUseCase.pay(
             PaymentCommand(
                 partnerId = req.partnerId,
                 amount = req.amount,
-                cardBin = req.cardBin,
+                cardBin = req.cardBin?.takeIf { it.isNotBlank() }?.take(6),
                 cardLast4 = req.cardLast4,
                 productName = req.productName,
             ),
@@ -68,25 +68,4 @@ class PaymentController(
      * @param limit 페이지 크기(기본 20)
      * @return 목록/통계/커서 정보
      */
-    @GetMapping
-    fun query(
-        @RequestParam(required = false) partnerId: Long?,
-        @RequestParam(required = false) status: String?,
-        @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM-dd HH:mm:ss") from: LocalDateTime?,
-        @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM-dd HH:mm:ss") to: LocalDateTime?,
-        @RequestParam(required = false) cursor: String?,
-        @RequestParam(defaultValue = "20") limit: Int,
-    ): ResponseEntity<QueryResponse> {
-        val res = queryPaymentsUseCase.query(
-            QueryFilter(partnerId, status, from, to, cursor, limit),
-        )
-        return ResponseEntity.ok(
-            QueryResponse(
-                items = res.items.map { PaymentResponse.from(it) },
-                summary = Summary(res.summary.count, res.summary.totalAmount, res.summary.totalNetAmount),
-                nextCursor = res.nextCursor,
-                hasNext = res.hasNext,
-            ),
-        )
-    }
 }

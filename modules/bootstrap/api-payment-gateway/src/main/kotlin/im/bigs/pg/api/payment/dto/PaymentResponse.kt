@@ -1,10 +1,7 @@
 package im.bigs.pg.api.payment.dto
 
-import com.fasterxml.jackson.annotation.JsonFormat
 import im.bigs.pg.domain.payment.Payment
-import im.bigs.pg.domain.payment.PaymentStatus
 import java.math.BigDecimal
-import java.time.LocalDateTime
 
 data class PaymentResponse(
     val id: Long?,
@@ -14,12 +11,10 @@ data class PaymentResponse(
     val feeAmount: BigDecimal,
     val netAmount: BigDecimal,
     val cardLast4: String?,
-    val approvalCode: String,
-    @get:JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
-    val approvedAt: LocalDateTime,
-    val status: PaymentStatus,
-    @get:JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
-    val createdAt: LocalDateTime,
+    val approvalCode: String?,
+    val approvedAt: String?,
+    val status: String,
+    val createdAt: String?,
 ) {
     companion object {
         fun from(p: Payment) = PaymentResponse(
@@ -31,9 +26,9 @@ data class PaymentResponse(
             netAmount = p.netAmount,
             cardLast4 = p.cardLast4,
             approvalCode = p.approvalCode,
-            approvedAt = p.approvedAt,
-            status = p.status,
-            createdAt = p.createdAt,
+            approvedAt = p.approvedAt.toString(),
+            status = p.status.name,
+            createdAt = p.createdAt.toString(),
         )
     }
 }

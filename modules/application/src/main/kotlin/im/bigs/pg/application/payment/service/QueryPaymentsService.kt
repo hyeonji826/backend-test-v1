@@ -12,22 +12,54 @@ import java.util.Base64
  * - 통계는 조회 조건과 동일한 집합을 대상으로 계산됩니다.
  */
 @Service
-class QueryPaymentsService : QueryPaymentsUseCase {
+class QueryPaymentsService(
+    private val paymentRepository: im.bigs.pg.application.payment.port.out.PaymentOutPort,
+) : QueryPaymentsUseCase {
     /**
      * 필터를 기반으로 결제 내역을 조회합니다.
      *
-     * 현재 구현은 과제용 목업으로, 빈 결과를 반환합니다.
-     * 지원자는 커서 기반 페이지네이션과 통계 집계를 완성하세요.
+     * 커서 기반 페이지네이션과 동일 조건의 통계를 함께 제공합니다.
      *
      * @param filter 파트너/상태/기간/커서/페이지 크기
      * @return 조회 결과(목록/통계/커서)
      */
     override fun query(filter: QueryFilter): QueryResult {
+        val (cursorCreatedAt, cursorId) = decodeCursor(filter.cursor)
+
+        val query = im.bigs.pg.application.payment.port.out.PaymentQuery(
+            partnerId = filter.partnerId,
+            status = filter.status?.let { im.bigs.pg.domain.payment.PaymentStatus.valueOf(it) },
+            from = filter.from,
+            to = filter.to,
+            limit = filter.limit,
+            cursorCreatedAt = cursorCreatedAt?.let { java.time.LocalDateTime.ofInstant(it, java.time.ZoneOffset.UTC) },
+            cursorId = cursorId,
+        )
+        val page = paymentRepository.findBy(query)
+
+        val summaryFilter = im.bigs.pg.application.payment.port.out.PaymentSummaryFilter(
+            partnerId = filter.partnerId,
+            status = filter.status?.let { im.bigs.pg.domain.payment.PaymentStatus.valueOf(it) },
+            from = filter.from,
+            to = filter.to,
+        )
+        val proj = paymentRepository.summary(summaryFilter)
+        val summary = PaymentSummary(
+            count = proj.count,
+            totalAmount = proj.totalAmount,
+            totalNetAmount = proj.totalNetAmount,
+        )
+
+        val nextCursor = if (page.hasNext) {
+            val nCreatedAt = page.nextCursorCreatedAt?.toInstant(java.time.ZoneOffset.UTC)
+            encodeCursor(nCreatedAt, page.nextCursorId)
+        } else null
+
         return QueryResult(
-            items = emptyList(),
-            summary = PaymentSummary(count = 0, totalAmount = java.math.BigDecimal.ZERO, totalNetAmount = java.math.BigDecimal.ZERO),
-            nextCursor = null,
-            hasNext = false,
+            items = page.items,
+            summary = summary,
+            nextCursor = nextCursor,
+            hasNext = page.hasNext,
         )
     }
 
