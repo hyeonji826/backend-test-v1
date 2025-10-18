@@ -1,19 +1,19 @@
 spring:
   datasource:
-    url: jdbc:mariadb://localhost:3306/payments
-    username: appuser
-    password: app1234
+    url: jdbc:mariadb://localhost:3306/appdb
+    username: root
+    password: root
     driver-class-name: org.mariadb.jdbc.Driver
+
   jpa:
     hibernate:
-      ddl-auto: update
-    properties:
-      hibernate:
-        dialect: org.hibernate.dialect.MariaDBDialect
+      ddl-auto: none
 
-logging:
-  level:
-    root: INFO
-    org.springframework.web: WARN
-    org.hibernate.SQL: WARN
-    im.bigs.pg: INFO
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:schema.sql
+      data-locations: []
+
+  flyway:
+    enabled: false
