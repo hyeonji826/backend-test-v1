@@ -18,28 +18,28 @@ import java.time.Instant
 class PaymentEntity(
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     var id: Long? = null,
-    @Column(nullable = false)
+    @Column(name = "partner_id", nullable = false)
     var partnerId: Long,
-    @Column(nullable = false, precision = 15, scale = 0)
+    @Column(name = "amount", nullable = false, precision = 15, scale = 0)
     var amount: BigDecimal,
-    @Column(nullable = false, precision = 10, scale = 6)
+    @Column(name = "applied_fee_rate", nullable = false, precision = 10, scale = 6)
     var appliedFeeRate: BigDecimal,
-    @Column(nullable = false, precision = 15, scale = 0)
+    @Column(name = "fee_amount", nullable = false, precision = 15, scale = 0)
     var feeAmount: BigDecimal,
-    @Column(nullable = false, precision = 15, scale = 0)
+    @Column(name = "net_amount", nullable = false, precision = 15, scale = 0)
     var netAmount: BigDecimal,
-    @Column(length = 8)
+    @Column(name = "card_bin", length = 8)
     var cardBin: String? = null,
-    @Column(length = 4)
+    @Column(name = "card_last4", length = 4)
     var cardLast4: String? = null,
-    @Column(nullable = false, length = 32)
+    @Column(name = "approval_code", nullable = false, length = 32)
     var approvalCode: String,
-    @Column(nullable = false)
+    @Column(name = "approved_at", nullable = false)
     var approvedAt: Instant,
-    @Column(nullable = false, length = 20)
+    @Column(name = "status", nullable = false, length = 20)
     var status: String,
-    @Column(nullable = false)
+    @Column(name = "created_at", nullable = false)
     var createdAt: Instant,
-    @Column(nullable = false)
+    @Column(name = "updated_at", nullable = false)
     var updatedAt: Instant,
 )

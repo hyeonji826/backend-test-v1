@@ -37,4 +37,14 @@ create table if not exists payment (
 );
 
 -- seed
-INSERT INTO partner (code, name, active) VALUES ('TEST', 'Test Partner', true);
+-- Use idempotent seed to avoid duplicate key errors when the app restarts
+INSERT IGNORE INTO partner (code, name, active) VALUES ('TEST', 'Test Partner', true);
+
+-- Ensure a default fee policy exists for the TEST partner so payments can be created immediately
+INSERT INTO partner_fee_policy (partner_id, effective_from, percentage, fixed_fee)
+SELECT p.id, '2020-01-01 00:00:00', 0.025000, 0
+FROM partner p
+WHERE p.code = 'TEST'
+  AND NOT EXISTS (
+    SELECT 1 FROM partner_fee_policy f WHERE f.partner_id = p.id
+  );

@@ -11,8 +11,13 @@ import java.time.ZoneOffset
 class FeePolicyPersistenceAdapter(
     private val repo: FeePolicyJpaRepository,
 ) : FeePolicyOutPort {
-    override fun findEffectivePolicy(partnerId: Long, at: java.time.LocalDateTime): FeePolicy? {
-        val e = repo.findTopByPartnerIdAndEffectiveFromBeforeEqOrderByEffectiveFromDesc(partnerId, at).firstOrNull()
+    override fun findEffectivePolicy(
+        partnerId: Long,
+        at: java.time.LocalDateTime,
+    ): FeePolicy? {
+        // Use derived query with Instant to avoid LocalDateTime vs Instant binding issues in JPQL
+        val instantAt = at.toInstant(ZoneOffset.UTC)
+        val e = repo.findTop1ByPartnerIdAndEffectiveFromLessThanEqualOrderByEffectiveFromDesc(partnerId, instantAt)
             ?: return null
         return FeePolicy(
             id = e.id,

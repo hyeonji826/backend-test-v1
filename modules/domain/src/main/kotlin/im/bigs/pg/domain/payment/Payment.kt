@@ -41,14 +41,10 @@ data class Payment(
     val updatedAt: LocalDateTime = LocalDateTime.now(),
 )
 
-/** 결제 상태. 취소 시에도 원본 행을 유지하고 상태만 변경하는 방식 등을 고려합니다. */
-
 /** 결제 상태.
  * - 승인(Approved), 취소(Canceled) 등 단순 상태를 표현합니다.
  */
 enum class PaymentStatus { APPROVED, CANCELED }
-
-/** 조회 API의 통계 응답에 사용되는 값 모음. */
 
 /** 조회 API의 통계 응답에 사용되는 값 모음. */
 data class PaymentSummary(

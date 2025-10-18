@@ -20,6 +20,7 @@ data class FeePolicy(
     val partnerId: Long,
     @get:JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     val effectiveFrom: LocalDateTime,
-    val percentage: BigDecimal, // e.g., 0.0235 (2.35%)
+    // e.g., 0.0235 (2.35%)
+    val percentage: BigDecimal,
     val fixedFee: BigDecimal? = null,
 )

@@ -125,7 +125,6 @@ project(":modules:external") {
     }
 }
 
-
 // Aggregate bootRun to run API gateway from root
 tasks.register("bootRun") {
     dependsOn(":modules:bootstrap:api-payment-gateway:bootRun")

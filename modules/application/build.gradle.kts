@@ -7,6 +7,7 @@ tasks.bootJar {
 }
 
 dependencies {
+    implementation(projects.modules.common)
     implementation(projects.modules.domain)
     // Only need Spring annotations (@Service) for this module
     implementation("org.springframework:spring-context")

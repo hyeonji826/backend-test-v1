@@ -17,18 +17,19 @@ data class PaymentResponse(
     val createdAt: String?,
 ) {
     companion object {
-        fun from(p: Payment) = PaymentResponse(
-            id = p.id,
-            partnerId = p.partnerId,
-            amount = p.amount,
-            appliedFeeRate = p.appliedFeeRate,
-            feeAmount = p.feeAmount,
-            netAmount = p.netAmount,
-            cardLast4 = p.cardLast4,
-            approvalCode = p.approvalCode,
-            approvedAt = p.approvedAt.toString(),
-            status = p.status.name,
-            createdAt = p.createdAt.toString(),
-        )
+        fun from(p: Payment) =
+            PaymentResponse(
+                id = p.id,
+                partnerId = p.partnerId,
+                amount = p.amount,
+                appliedFeeRate = p.appliedFeeRate,
+                feeAmount = p.feeAmount,
+                netAmount = p.netAmount,
+                cardLast4 = p.cardLast4,
+                approvalCode = p.approvalCode,
+                approvedAt = java.time.format.DateTimeFormatter.ISO_INSTANT.format(p.approvedAt.toInstant(java.time.ZoneOffset.UTC)),
+                status = p.status.name,
+                createdAt = java.time.format.DateTimeFormatter.ISO_INSTANT.format(p.createdAt.toInstant(java.time.ZoneOffset.UTC)),
+            )
     }
 }

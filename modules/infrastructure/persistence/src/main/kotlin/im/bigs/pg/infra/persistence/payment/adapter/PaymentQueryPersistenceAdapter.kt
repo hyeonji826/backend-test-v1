@@ -4,10 +4,10 @@ import im.bigs.pg.domain.payment.Payment
 import im.bigs.pg.domain.payment.PaymentStatus
 import im.bigs.pg.infra.persistence.payment.entity.PaymentEntity
 import im.bigs.pg.infra.persistence.payment.repository.PaymentJpaRepository
-import java.math.BigDecimal
-import java.time.Instant
 import org.springframework.data.domain.Pageable
 import org.springframework.stereotype.Component
+import java.math.BigDecimal
+import java.time.Instant
 
 /**
  * Adapter providing page/summary queries as described in the issue.
@@ -17,7 +17,6 @@ import org.springframework.stereotype.Component
 class PaymentQueryPersistenceAdapter(
     private val repo: PaymentJpaRepository,
 ) {
-
     fun pageBy(
         partnerId: Long?,
         status: String?,
@@ -27,15 +26,16 @@ class PaymentQueryPersistenceAdapter(
         cursorId: Long?,
         pageable: Pageable,
     ): List<Payment> {
-        val list = repo.pageBy(
-            partnerId = partnerId,
-            status = status,
-            fromAt = from,
-            toAt = to,
-            cursorCreatedAt = cursorCreatedAt,
-            cursorId = cursorId,
-            org = pageable,
-        )
+        val list =
+            repo.pageBy(
+                partnerId = partnerId,
+                status = status,
+                fromAt = from,
+                toAt = to,
+                cursorCreatedAt = cursorCreatedAt,
+                cursorId = cursorId,
+                org = pageable,
+            )
         return list.map { it.toDomain() }
     }
 
@@ -51,12 +51,13 @@ class PaymentQueryPersistenceAdapter(
         from: Instant?,
         to: Instant?,
     ): PaymentSummary {
-        val row = repo.summary(
-            partnerId = partnerId,
-            status = status,
-            fromAt = from,
-            toAt = to,
-        ).firstOrNull()
+        val row =
+            repo.summary(
+                partnerId = partnerId,
+                status = status,
+                fromAt = from,
+                toAt = to,
+            ).firstOrNull()
 
         if (row == null) {
             return PaymentSummary(0, BigDecimal.ZERO, BigDecimal.ZERO)

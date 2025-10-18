@@ -1,3 +1,23 @@
+server:
+  port: 8080
+
 spring:
-  profiles:
-    active: mariadb
+  datasource:
+    url: jdbc:mariadb://localhost:3306/appdb?useSSL=false&allowPublicKeyRetrieval=true
+    username: appuser
+    password: app-pass
+    driver-class-name: org.mariadb.jdbc.Driver
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:schema.sql
+  jpa:
+    hibernate:
+      ddl-auto: none
+
+springdoc:
+  api-docs:
+    enabled: true
+  swagger-ui:
+    enabled: true
+    path: /swagger-ui.html

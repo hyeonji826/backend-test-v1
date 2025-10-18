@@ -16,6 +16,7 @@ import java.time.Instant
  * - 운영 환경에서는 제거하거나 마이그레이션 도구로 대체합니다.
  */
 @Configuration
+@org.springframework.context.annotation.Profile("!mariadb")
 class DataInitializer {
     private val log = LoggerFactory.getLogger(javaClass)
 

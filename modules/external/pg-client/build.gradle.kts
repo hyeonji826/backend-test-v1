@@ -7,6 +7,7 @@ tasks.bootJar {
 }
 
 dependencies {
+    implementation(projects.modules.common)
     implementation(projects.modules.application)
     implementation(projects.modules.domain)
     implementation(libs.spring.boot.starter.web)

@@ -1,55 +1,83 @@
 package im.bigs.pg.external.pg
 
-import im.bigs.pg.application.pg.port.out.PgApproveRequest
-import im.bigs.pg.application.pg.port.out.PgApproveResult
-import im.bigs.pg.application.pg.port.out.PgClientOutPort
+import im.bigs.pg.application.pg.port.out.*
 import im.bigs.pg.domain.payment.PaymentStatus
-import java.time.LocalDateTime
+import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.http.HttpEntity
 import org.springframework.http.HttpHeaders
 import org.springframework.http.MediaType
+import org.springframework.core.annotation.Order
 import org.springframework.stereotype.Component
 import org.springframework.web.client.RestTemplate
+import java.time.LocalDateTime
+import java.util.Base64
 
 /**
  * 데모용 Test PG 연동 클라이언트.
- * - 과제 내 연동 대상 API 문서에 맞춰 base-url만 조정하면 됩니다.
- * - 승인 응답은 데모 특성상 성공 케이스로 고정합니다.
+ * - 통일된 규약에 맞춰 API-KEY 헤더와 /api/v1/pay/credit-card, /api/v1/pay/cancel 엔드포인트를 호출합니다.
+ * - HTTP 4xx/5xx 응답은 예외로 전파하여 상위 서비스가 적절히 매핑하도록 합니다.
  */
 @Component
+@Order(1)
 class TestPgClient(
     private val rest: RestTemplate,
-    @Value("\${pg.test.base-url}") private val baseUrl: String,
-    @Value("\${pg.test.api-key}") private val apiKey: String,
+    // 환경변수 PG_BASE_URL/PG_API_KEY를 우선 사용하고, 없으면 기존 속성/기본값을 사용
+    @Value("\${pg.test.base-url:\${PG_BASE_URL:http://localhost:18080}}") private val baseUrl: String,
+    @Value("\${pg.test.api-key:\${PG_API_KEY:test-api-key}}") private val apiKey: String,
 ) : PgClientOutPort {
+    private val log = LoggerFactory.getLogger(javaClass)
 
     // 데모: 모든 파트너를 지원한다고 가정
     override fun supports(partnerId: Long): Boolean = true
 
     override fun approve(request: PgApproveRequest): PgApproveResult {
-        // 민감정보 최소 전송: cardLast4만 전달 (cardBin은 null 허용)
-        val payload = mapOf(
-            "partnerId" to request.partnerId,
-            "amount" to request.amount.toPlainString(),
-            "cardLast4" to request.cardLast4,
-            "productName" to request.productName,
-        )
+        val raw = "${'$'}{request.partnerId}|${'$'}{request.amount}|${'$'}{request.cardLast4}|${'$'}{request.productName}"
+        val enc = Base64.getUrlEncoder().withoutPadding().encodeToString(raw.toByteArray())
+        val payload = mapOf("enc" to enc)
+
         val headers = HttpHeaders().apply {
             contentType = MediaType.APPLICATION_JSON
-            set("Authorization", "Bearer $apiKey")
+            if (apiKey.isNotBlank()) set("API-KEY", apiKey)
         }
         val entity = HttpEntity(payload, headers)
 
-        // 실제 문서의 승인 엔드포인트 명세에 맞춰 경로만 바꾸면 됨
-        val url = "$baseUrl/api/approve"
-        // 데모환경: 항상 승인이라 응답을 사용하지 않고 성공 케이스만 구성
-        rest.postForEntity(url, entity, Map::class.java)
+        val url = "$baseUrl/api/v1/pay/credit-card"
+        try {
+            rest.postForEntity(url, entity, Map::class.java)
+        } catch (e: org.springframework.web.client.HttpStatusCodeException) {
+            when (e.statusCode.value()) {
+                401 -> throw im.bigs.pg.common.UnauthorizedException("PG unauthorized: ${e.responseBodyAsString}")
+                422 -> throw im.bigs.pg.common.UnprocessableException("PG approve failed: ${e.responseBodyAsString}")
+                in 400..499 -> throw IllegalArgumentException("PG client error: ${e.statusCode.value()}")
+                else -> throw e
+            }
+        }
 
         return PgApproveResult(
             approvalCode = "TESTPG-${System.currentTimeMillis()}",
             approvedAt = LocalDateTime.now(),
             status = PaymentStatus.APPROVED,
+        )
+    }
+
+    override fun cancel(request: PgCancelRequest): PgCancelResult {
+        val reasonPart = request.reason ?: ""
+        val amountPart = request.cancelAmount?.toPlainString() ?: "0"
+        val raw = "${'$'}{request.partnerId}|${'$'}{request.paymentId}|${amountPart}|${reasonPart}"
+        val enc = Base64.getUrlEncoder().withoutPadding().encodeToString(raw.toByteArray())
+        val payload = mapOf("enc" to enc)
+        val headers = HttpHeaders().apply {
+            contentType = MediaType.APPLICATION_JSON
+            if (apiKey.isNotBlank()) set("API-KEY", apiKey)
+        }
+        val entity = HttpEntity(payload, headers)
+        val url = "$baseUrl/api/v1/pay/cancel"
+        // Let RestTemplate throw on non-2xx
+        rest.postForEntity(url, entity, Map::class.java)
+        return PgCancelResult(
+            canceledAt = LocalDateTime.now(),
+            status = PaymentStatus.CANCELED,
         )
     }
 }

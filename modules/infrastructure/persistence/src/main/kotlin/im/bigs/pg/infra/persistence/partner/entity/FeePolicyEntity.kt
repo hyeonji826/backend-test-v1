@@ -18,12 +18,12 @@ import java.time.Instant
 class FeePolicyEntity(
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     var id: Long? = null,
-    @Column(nullable = false)
+    @Column(name = "partner_id", nullable = false)
     var partnerId: Long,
-    @Column(nullable = false)
+    @Column(name = "effective_from", nullable = false)
     var effectiveFrom: Instant,
-    @Column(nullable = false, precision = 10, scale = 6)
+    @Column(name = "percentage", nullable = false, precision = 10, scale = 6)
     var percentage: BigDecimal,
-    @Column(precision = 15, scale = 0)
+    @Column(name = "fixed_fee", precision = 15, scale = 0)
     var fixedFee: BigDecimal? = null,
 )

@@ -1,4 +1,215 @@
-# 백엔드 사전 과제 – 결제 도메인 서버
+# API Payment Gateway (과제)
+
+1. 개요
+
+프로젝트명: API Payment Gateway (과제)
+
+핵심기능: 결제 승인/취소, 파트너별 수수료 정책, 커서 기반 페이지네이션, 외부 PG 모킹(WireMock), 아이도템포턴시
+
+한 줄 실행:
+
+powershell -ExecutionPolicy Bypass -File .\scripts\docker-e2e.ps1
+Invoke-RestMethod http://localhost:18080/__admin/requests | ConvertTo-Json -Depth 6
+
+2. 실행 환경
+
+Docker / Docker Compose
+
+Java 21 (eclipse-temurin)
+
+MariaDB, WireMock
+
+3. 환경변수(고정 키 이름)
+Key	예시값	설명
+SPRING_PROFILES_ACTIVE	local-docker	도커 네트워크 프로파일
+PG_BASE_URL	http://wiremock:8080	외부 PG 모킹 베이스 URL
+PG_API_KEY	test-api-key	PG 호출 API-KEY (실패 유도 시 fail-api-key 또는 빈값)
+4. DB 스키마/시드
+
+scripts/docker-e2e.ps1 실행 시 scheme.sql 자동 적용
+
+시드: 파트너(TEST, NEW), 파트너별 수수료 정책(예: TEST=2.5%, NEW=3.0%)
+
+5. API 요약
+
+결제 승인 생성: POST /api/v1/payments
+
+헤더: Idempotency-Key: <string>
+
+결제 조회(커서 기반): GET /api/v1/payments?partnerId={id}&status={APPROVED|CANCELED}&limit={n}&cursor={token}
+
+결제 취소(전체/부분): POST /api/v1/payments/{id}/cancel
+
+바디: { "reason": "...", "cancelAmount": 5000 } (전체 취소 시 cancelAmount 생략)
+
+6. 외부 PG 모킹(WireMock)
+
+승인: POST /api/v1/pay/credit-card (헤더 API-KEY)
+
+취소: POST /api/v1/pay/cancel (헤더 API-KEY)
+
+앱 컨테이너는 도커 네트워크 서비스명으로 호출: http://wiremock:8080
+
+7. 빠른 시연 스크립트
+# 승인 (Idempotency-Key 포함)
+$body = @{ partnerId=1; amount=20000; cardBin="111122"; cardLast4="3344"; productName="demo" } | ConvertTo-Json
+Invoke-RestMethod -Method Post http://localhost:8080/api/v1/payments `
+ -ContentType application/json -Headers @{ "Idempotency-Key"="demo-001" } -Body $body
+
+# 조회 (limit=5)
+Invoke-RestMethod "http://localhost:8080/api/v1/payments?partnerId=1&status=APPROVED&limit=5"
+
+# 취소(전체)
+Invoke-RestMethod -Method Post http://localhost:8080/api/v1/payments/1/cancel `
+ -ContentType application/json -Body (@{ reason="user_request" } | ConvertTo-Json)
+
+# WireMock 저널 확인
+Invoke-RestMethod http://localhost:18080/__admin/requests | ConvertTo-Json -Depth 6
+
+8. 에러 재현 가이드
+
+PG 실패(422): PG_API_KEY=fail-api-key로 컨테이너 기동 후 취소 요청
+
+인증 누락(401): PG_API_KEY를 비우거나 bad-key로 실행(스텁 필요)
+
+입력 검증(400/422): 음수 금액, 카드 필드 빈값/자리수 오류, 존재하지 않는 파트너
+
+아이도템포턴시(409): 동일 Idempotency-Key로 중복 승인 요청
+
+9. 테스트
+
+도메인: 수수료 라운딩/상태 전이
+
+인프라 통합: Testcontainers(MariaDB) + WireMock(200/422)
+
+10. Swagger / OpenAPI 문서
+
+UI: http://localhost:8080/swagger-ui.html
+
+스펙: http://localhost:8080/v3/api-docs
+
+에러 응답(JSON) 샘플 (제출 본문에 그대로 첨부 권장)
+공통 포맷
+{
+  "code": 422,
+  "errorCode": "INSUFFICIENT_LIMIT",
+  "message": "Credit limit exceeded",
+  "referenceId": "ref-xyz"
+}
+
+400/422 (입력 검증 실패)
+{
+  "code": 422,
+  "errorCode": "VALIDATION_ERROR",
+  "message": "amount must be >= 1, cardLast4 must be 4 digits",
+  "referenceId": "req-20251018-001"
+}
+
+401 (인증 누락/잘못된 키)
+{
+  "code": 401,
+  "errorCode": "UNAUTHORIZED",
+  "message": "API-KEY missing or invalid",
+  "referenceId": "ref-unauth"
+}
+
+404 (리소스 없음 / 파트너 없음)
+{
+  "code": 404,
+  "errorCode": "NOT_FOUND",
+  "message": "Partner not found: id=999999",
+  "referenceId": "req-20251018-002"
+}
+
+409 (아이도템포턴시 충돌)
+{
+  "code": 409,
+  "errorCode": "IDEMPOTENCY_CONFLICT",
+  "message": "Duplicate request with the same Idempotency-Key",
+  "referenceId": "req-20251018-003"
+}
+
+422 (PG 한도 초과 등 외부 에러 매핑)
+{
+  "code": 422,
+  "errorCode": "OVER_CANCEL",
+  "message": "Cancel amount exceeds approved",
+  "referenceId": "pg-ref-cx"
+}
+
+Swagger(OpenAPI) 연동 가이드
+Gradle (Kotlin DSL)
+dependencies {
+    implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.6.0")
+}
+
+애플리케이션 설정 (선택)
+
+application.yml
+
+springdoc:
+  api-docs:
+    enabled: true
+  swagger-ui:
+    enabled: true
+    path: /swagger-ui.html
+
+컨트롤러 예시 어노테이션
+@Operation(
+  summary = "결제 승인 생성",
+  description = "Idempotency-Key 헤더 필수. 성공 시 승인 결과 반환"
+)
+@ApiResponses(
+  value = [
+    ApiResponse(responseCode = "200", description = "승인 성공"),
+    ApiResponse(responseCode = "400", description = "유효성 오류"),
+    ApiResponse(responseCode = "409", description = "아이도템포턴시 충돌"),
+    ApiResponse(responseCode = "422", description = "외부 PG 오류 매핑")
+  ]
+)
+@PostMapping("/api/v1/payments")
+fun createPayment(
+  @Parameter(description = "Idempotency-Key", required = true)
+  @RequestHeader("Idempotency-Key") key: String,
+  @RequestBody req: PaymentCommand
+): PaymentResponse { ... }
+
+에러 스키마 모델(선택)
+@Schema(description = "표준 에러 응답")
+data class ErrorResponse(
+  @Schema(example = "422") val code: Int,
+  @Schema(example = "INSUFFICIENT_LIMIT") val errorCode: String,
+  @Schema(example = "Credit limit exceeded") val message: String,
+  @Schema(example = "ref-xyz") val referenceId: String?
+)
+
+글로벌 예외 처리(요약)
+@RestControllerAdvice
+class GlobalExceptionHandler {
+  @ExceptionHandler(ValidationException::class)
+  fun handleValidation(e: ValidationException): ResponseEntity<ErrorResponse> =
+    ResponseEntity.status(422).body(ErrorResponse(422, "VALIDATION_ERROR", e.message ?: "Invalid", genRef()))
+
+  @ExceptionHandler(IdempotencyConflict::class)
+  fun handleIdem(e: IdempotencyConflict): ResponseEntity<ErrorResponse> =
+    ResponseEntity.status(409).body(ErrorResponse(409, "IDEMPOTENCY_CONFLICT", e.message ?: "Conflict", genRef()))
+
+  // ... 401, 404, 422(PG) 등 추가
+}
+
+제출 체크리스트(최종)
+
+ 한 줄 실행 + WireMock 저널 확인 명령
+
+ ENV 표 (키 이름 명확)
+
+ 성공/실패 응답 샘플(JSON) 포함
+
+ Swagger 접속 경로 기재 (/swagger-ui.html, /v3/api-docs)
+
+ 에러 재현 방법(422/401/400/409) 안내
+
+ 커서 페이징/수수료 정책 설명 한 줄
 
 본 과제는 나노바나나 페이먼츠의 “결제 도메인 서버”를 주제로, 백엔드 개발자의 설계·구현·테스트 역량을 평가하기 위한 사전 과제입니다. 제공된 멀티모듈 + 헥사고널 아키텍처 기반 코드를 바탕으로 요구사항을 충족하는 기능을 완성해 주세요.
 
@@ -141,3 +352,54 @@ GET /api/v1/payments?partnerId=1&status=APPROVED&from=2025-01-01T00:00:00Z&to=20
 - 제출물을 기준으로 면접시 코드리뷰를 진행합니다. 이를 고려해주세요. 
 
 행운을 빕니다. 읽기 쉬운 코드, 일관된 설계, 신뢰할 수 있는 테스트를 기대합니다.
+
+
+## Docker tips: WireMock name conflict and Compose warning
+
+- Compose version key obsolete: This repository uses Docker Compose v2 syntax. If you see a warning like:
+  - the attribute `version` is obsolete, it will be ignored
+  It is safe to ignore, but we removed the `version` key from docker-compose.yml to silence it.
+
+- WireMock container name conflict: If a standalone container named `wiremock` already exists, Compose will fail to start the service with a name conflict. Recover with:
+  - PowerShell:
+    - `docker stop wiremock 2>$null; docker rm wiremock 2>$null`
+    - `docker compose up -d wiremock`
+
+- Start both services (MariaDB + WireMock):
+  - `docker compose up -d mariadb wiremock`
+
+- Check status:
+  - `docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"`
+
+
+
+
+### PowerShell pitfalls: avoid $PID collision when calling APIs
+
+PowerShell variable names are case-insensitive and `$PID` is a reserved, read-only variable that holds the current shell process id. Using `$pid` will refer to the same reserved variable and will not contain your database partner id. This can cause `POST /api/v1/payments` to fail with 500 (partner not found) before the PG call is attempted, and WireMock will show no requests.
+
+Use a different variable name (e.g., `$partnerId`) and ConvertTo-Json for the request body:
+
+```powershell
+# Resolve the TEST partner id from MariaDB
+$partnerId = docker exec -i mariadb mariadb -uappuser -papp-pass appdb -N -e "SELECT id FROM partner WHERE code='TEST' LIMIT 1;"
+
+# Create payment (POST)
+$body = @{ 
+  partnerId  = [int]$partnerId
+  amount     = 10000
+  cardBin    = "123456"
+  cardLast4  = "4242"
+  productName= "sample"
+} | ConvertTo-Json
+
+Invoke-RestMethod -Method Post -Uri "http://localhost:8080/api/v1/payments" -ContentType "application/json" -Body $body
+
+# Query payments (GET)
+Invoke-RestMethod -Method Get -Uri ("http://localhost:8080/api/v1/payments?partnerId={0}&status=APPROVED&limit=5" -f $partnerId)
+
+# Check PG (WireMock) request journal
+Invoke-RestMethod -Method Get -Uri "http://localhost:18080/__admin/requests" | ConvertTo-Json -Depth 6
+```
+
+If the POST still returns 500, collect the response body and the last ~50 lines of the API logs from `bootRun` and share them for diagnosis.

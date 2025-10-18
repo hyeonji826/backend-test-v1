@@ -18,21 +18,22 @@ import java.time.ZoneOffset
 class PaymentPersistenceAdapter(
     private val repo: PaymentJpaRepository,
 ) : PaymentOutPort {
+    override fun save(payment: Payment): Payment = repo.save(payment.toEntity()).toDomain()
 
-    override fun save(payment: Payment): Payment =
-        repo.save(payment.toEntity()).toDomain()
+    override fun findById(id: Long): Payment? = repo.findById(id).orElse(null)?.toDomain()
 
     override fun findBy(query: PaymentQuery): PaymentPage {
         val pageSize = query.limit
-        val list = repo.pageBy(
-            partnerId = query.partnerId,
-            status = query.status?.name,
-            fromAt = query.from?.toInstant(ZoneOffset.UTC),
-            toAt = query.to?.toInstant(ZoneOffset.UTC),
-            cursorCreatedAt = query.cursorCreatedAt?.toInstant(ZoneOffset.UTC),
-            cursorId = query.cursorId,
-            org = PageRequest.of(0, pageSize + 1),
-        )
+        val list =
+            repo.pageBy(
+                partnerId = query.partnerId,
+                status = query.status?.name,
+                fromAt = query.from?.toInstant(ZoneOffset.UTC),
+                toAt = query.to?.toInstant(ZoneOffset.UTC),
+                cursorCreatedAt = query.cursorCreatedAt?.toInstant(ZoneOffset.UTC),
+                cursorId = query.cursorId,
+                org = PageRequest.of(0, pageSize + 1),
+            )
         val hasNext = list.size > pageSize
         val items = list.take(pageSize)
         val last = items.lastOrNull()
@@ -45,12 +46,13 @@ class PaymentPersistenceAdapter(
     }
 
     override fun summary(filter: PaymentSummaryFilter): PaymentSummaryProjection {
-        val list = repo.summary(
-            partnerId = filter.partnerId,
-            status = filter.status?.name,
-            fromAt = filter.from?.toInstant(ZoneOffset.UTC),
-            toAt = filter.to?.toInstant(ZoneOffset.UTC),
-        )
+        val list =
+            repo.summary(
+                partnerId = filter.partnerId,
+                status = filter.status?.name,
+                fromAt = filter.from?.toInstant(ZoneOffset.UTC),
+                toAt = filter.to?.toInstant(ZoneOffset.UTC),
+            )
         val arr = list.first()
         val cnt = (arr[0] as Number).toLong()
         val totalAmount = arr[1] as java.math.BigDecimal
@@ -59,8 +61,8 @@ class PaymentPersistenceAdapter(
     }
 
     /** 도메인 → 엔티티 매핑. */
-    private fun Payment.toEntity() =
-        PaymentEntity(
+    private fun Payment.toEntity(): PaymentEntity {
+        return PaymentEntity(
             id = this.id,
             partnerId = this.partnerId,
             amount = this.amount,
@@ -75,10 +77,11 @@ class PaymentPersistenceAdapter(
             createdAt = this.createdAt.toInstant(ZoneOffset.UTC),
             updatedAt = this.updatedAt.toInstant(ZoneOffset.UTC),
         )
+    }
 
     /** 엔티티 → 도메인 매핑. */
-    private fun PaymentEntity.toDomain() =
-        Payment(
+    private fun PaymentEntity.toDomain(): Payment {
+        return Payment(
             id = this.id,
             partnerId = this.partnerId,
             amount = this.amount,
@@ -93,4 +96,5 @@ class PaymentPersistenceAdapter(
             createdAt = java.time.LocalDateTime.ofInstant(this.createdAt, ZoneOffset.UTC),
             updatedAt = java.time.LocalDateTime.ofInstant(this.updatedAt, ZoneOffset.UTC),
         )
+    }
 }

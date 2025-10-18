@@ -1,6 +1,8 @@
 package im.bigs.pg.application.payment.service
 
-import im.bigs.pg.application.payment.port.`in`.*
+import im.bigs.pg.application.payment.port.`in`.QueryFilter
+import im.bigs.pg.application.payment.port.`in`.QueryPaymentsUseCase
+import im.bigs.pg.application.payment.port.`in`.QueryResult
 import im.bigs.pg.domain.payment.PaymentSummary
 import org.springframework.stereotype.Service
 import java.time.Instant
@@ -26,34 +28,40 @@ class QueryPaymentsService(
     override fun query(filter: QueryFilter): QueryResult {
         val (cursorCreatedAt, cursorId) = decodeCursor(filter.cursor)
 
-        val query = im.bigs.pg.application.payment.port.out.PaymentQuery(
-            partnerId = filter.partnerId,
-            status = filter.status?.let { im.bigs.pg.domain.payment.PaymentStatus.valueOf(it) },
-            from = filter.from,
-            to = filter.to,
-            limit = filter.limit,
-            cursorCreatedAt = cursorCreatedAt?.let { java.time.LocalDateTime.ofInstant(it, java.time.ZoneOffset.UTC) },
-            cursorId = cursorId,
-        )
+        val query =
+            im.bigs.pg.application.payment.port.out.PaymentQuery(
+                partnerId = filter.partnerId,
+                status = filter.status?.let { im.bigs.pg.domain.payment.PaymentStatus.valueOf(it) },
+                from = filter.from,
+                to = filter.to,
+                limit = filter.limit,
+                cursorCreatedAt = cursorCreatedAt?.let { java.time.LocalDateTime.ofInstant(it, java.time.ZoneOffset.UTC) },
+                cursorId = cursorId,
+            )
         val page = paymentRepository.findBy(query)
 
-        val summaryFilter = im.bigs.pg.application.payment.port.out.PaymentSummaryFilter(
-            partnerId = filter.partnerId,
-            status = filter.status?.let { im.bigs.pg.domain.payment.PaymentStatus.valueOf(it) },
-            from = filter.from,
-            to = filter.to,
-        )
+        val summaryFilter =
+            im.bigs.pg.application.payment.port.out.PaymentSummaryFilter(
+                partnerId = filter.partnerId,
+                status = filter.status?.let { im.bigs.pg.domain.payment.PaymentStatus.valueOf(it) },
+                from = filter.from,
+                to = filter.to,
+            )
         val proj = paymentRepository.summary(summaryFilter)
-        val summary = PaymentSummary(
-            count = proj.count,
-            totalAmount = proj.totalAmount,
-            totalNetAmount = proj.totalNetAmount,
-        )
+        val summary =
+            PaymentSummary(
+                count = proj.count,
+                totalAmount = proj.totalAmount,
+                totalNetAmount = proj.totalNetAmount,
+            )
 
-        val nextCursor = if (page.hasNext) {
-            val nCreatedAt = page.nextCursorCreatedAt?.toInstant(java.time.ZoneOffset.UTC)
-            encodeCursor(nCreatedAt, page.nextCursorId)
-        } else null
+        val nextCursor =
+            if (page.hasNext) {
+                val nCreatedAt = page.nextCursorCreatedAt?.toInstant(java.time.ZoneOffset.UTC)
+                encodeCursor(nCreatedAt, page.nextCursorId)
+            } else {
+                null
+            }
 
         return QueryResult(
             items = page.items,
@@ -64,7 +72,10 @@ class QueryPaymentsService(
     }
 
     /** 다음 페이지 이동을 위한 커서 인코딩. */
-    private fun encodeCursor(createdAt: Instant?, id: Long?): String? {
+    private fun encodeCursor(
+        createdAt: Instant?,
+        id: Long?,
+    ): String? {
         if (createdAt == null || id == null) return null
         val raw = "${createdAt.toEpochMilli()}:$id"
         return Base64.getUrlEncoder().withoutPadding().encodeToString(raw.toByteArray())

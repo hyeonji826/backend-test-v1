@@ -1,0 +1,25 @@
+{
+  "request": {
+    "method": "POST",
+    "urlPath": "/api/v1/pay/credit-card",
+    "headers": {
+      "API-KEY": {
+        "matches": "test-api-key"
+      }
+    },
+    "bodyPatterns": [
+      { "matchesJsonPath": "$.enc" }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "approvalCode": "10183497",
+      "approvedAt": "2025-10-18T14:10:19Z",
+      "status": "APPROVED"
+    }
+  }
+}

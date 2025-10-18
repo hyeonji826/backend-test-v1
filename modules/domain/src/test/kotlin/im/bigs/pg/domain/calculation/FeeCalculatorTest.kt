@@ -5,7 +5,7 @@ import java.math.BigDecimal
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
-class 수수료계산기Test {
+class FeeCalculatorTest {
     @Test
     @DisplayName("퍼센트 수수료만 적용 시 반올림 및 정산금이 정확해야 한다")
     fun `퍼센트 수수료만 적용 시 반올림 및 정산금이 정확해야 한다`() {

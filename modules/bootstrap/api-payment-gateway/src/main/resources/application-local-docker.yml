@@ -1,0 +1,38 @@
+spring:
+  datasource:
+    url: jdbc:mariadb://mariadb:3306/appdb
+    username: appuser
+    password: app-pass
+    driver-class-name: org.mariadb.jdbc.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: none
+
+  sql:
+    init:
+      mode: never
+
+  flyway:
+    enabled: false
+
+pg:
+  test:
+    # 기본값은 WireMock 컨테이너, 환경변수 PG_BASE_URL/PG_API_KEY로 덮어쓰기 가능
+    base-url: http://wiremock:8080
+    api-key: test-api-key
+
+server:
+  error:
+    include-message: always
+    include-exception: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+
+logging:
+  level:
+    im.bigs.pg: DEBUG

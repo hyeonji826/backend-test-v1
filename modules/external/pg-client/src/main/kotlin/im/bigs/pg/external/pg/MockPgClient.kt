@@ -1,8 +1,6 @@
 package im.bigs.pg.external.pg
 
-import im.bigs.pg.application.pg.port.out.PgApproveRequest
-import im.bigs.pg.application.pg.port.out.PgApproveResult
-import im.bigs.pg.application.pg.port.out.PgClientOutPort
+import im.bigs.pg.application.pg.port.out.*
 import im.bigs.pg.domain.payment.PaymentStatus
 import org.springframework.stereotype.Component
 import java.time.LocalDate
@@ -16,6 +14,7 @@ import kotlin.random.Random
  * - 실제 네트워크 호출은 없으며, 시나리오 이해를 위한 더미 구성입니다.
  */
 @Component
+@org.springframework.core.annotation.Order(2)
 class MockPgClient : PgClientOutPort {
     override fun supports(partnerId: Long): Boolean = partnerId % 2L == 1L
 
@@ -26,6 +25,13 @@ class MockPgClient : PgClientOutPort {
             approvalCode = "$dateOfMonth$randomDigits",
             approvedAt = LocalDateTime.now(ZoneOffset.UTC),
             status = PaymentStatus.APPROVED,
+        )
+    }
+
+    override fun cancel(request: PgCancelRequest): PgCancelResult {
+        return PgCancelResult(
+            canceledAt = LocalDateTime.now(ZoneOffset.UTC),
+            status = PaymentStatus.CANCELED,
         )
     }
 }

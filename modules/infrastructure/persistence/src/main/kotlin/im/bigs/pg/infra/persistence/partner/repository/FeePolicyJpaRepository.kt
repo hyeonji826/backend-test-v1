@@ -1,11 +1,11 @@
 package im.bigs.pg.infra.persistence.partner.repository
 
 import im.bigs.pg.infra.persistence.partner.entity.FeePolicyEntity
-import java.time.Instant
-import java.time.LocalDateTime
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
+import java.time.Instant
+import java.time.LocalDateTime
 
 /** 수수료 정책 조회용 JPA 리포지토리. */
 interface FeePolicyJpaRepository : JpaRepository<FeePolicyEntity, Long> {
@@ -25,10 +25,10 @@ interface FeePolicyJpaRepository : JpaRepository<FeePolicyEntity, Long> {
         WHERE f.partnerId = :partnerId
           AND f.effectiveFrom <= :at
         ORDER BY f.effectiveFrom DESC, f.id DESC
-        """
+        """,
     )
     fun findTopByPartnerIdAndEffectiveFromBeforeEqOrderByEffectiveFromDesc(
         @Param("partnerId") partnerId: Long,
-        @Param("at") at: LocalDateTime,
+        @Param("at") at: Instant,
     ): List<FeePolicyEntity>
 }

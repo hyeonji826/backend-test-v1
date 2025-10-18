@@ -35,16 +35,17 @@ class QueryPaymentsAdapterService(
     private val queryPaymentsUseCase: QueryPaymentsUseCase,
 ) {
     fun execute(q: Query): PageResult {
-        val res = queryPaymentsUseCase.query(
-            QueryFilter(
-                partnerId = q.partnerId,
-                status = q.status,
-                from = q.from?.let { LocalDateTime.ofInstant(it, ZoneOffset.UTC) },
-                to = q.to?.let { LocalDateTime.ofInstant(it, ZoneOffset.UTC) },
-                cursor = q.cursor,
-                limit = q.limit,
-            ),
-        )
+        val res =
+            queryPaymentsUseCase.query(
+                QueryFilter(
+                    partnerId = q.partnerId,
+                    status = q.status,
+                    from = q.from?.let { LocalDateTime.ofInstant(it, ZoneOffset.UTC) },
+                    to = q.to?.let { LocalDateTime.ofInstant(it, ZoneOffset.UTC) },
+                    cursor = q.cursor,
+                    limit = q.limit,
+                ),
+            )
         return PageResult(
             items = res.items,
             summary = res.summary,
