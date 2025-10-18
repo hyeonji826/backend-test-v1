@@ -5,7 +5,7 @@
 
 ---
 
-## 📌 1. 개요
+## 1. 개요
 
 | 항목 | 내용 |
 |------|------|
@@ -17,7 +17,7 @@
 
 ---
 
-## ⚙️ 2. 실행 환경
+## 2. 실행 환경
 
 - **Java** 21 (Eclipse Temurin)  
 - **Docker** / **Docker Compose**  
@@ -26,7 +26,7 @@
 
 ---
 
-## 🔧 3. 환경 변수 설정
+## 3. 환경 변수 설정
 
 | Key | 예시값 | 설명 |
 |-----|--------|------|
@@ -38,7 +38,7 @@
 
 ---
 
-## 🗄️ 4. DB 스키마 / 시드
+## 4. DB 스키마 / 시드
 
 - `scripts/docker-e2e.ps1` 실행 시 `sql/scheme.sql` 자동 적용  
 - 기본 시드 데이터:
@@ -47,7 +47,7 @@
 
 ---
 
-## 🚀 5. API 요약
+## 5. API 요약
 
 ### ✅ 결제 승인 생성 (`POST /api/v1/payments`)
 
@@ -55,7 +55,7 @@
 Idempotency-Key: <string>
 
 pgsql
-코드 복사
+
 
 **Request**
 ```json
@@ -82,15 +82,18 @@ pgsql
   "approvedAt": "2025-01-01T00:00:00Z",
   "status": "APPROVED"
 }
-📊 결제 조회 (커서 기반 + 통계)
-Request
+```
 
-bash
-코드 복사
+결제 조회 (커서 기반 + 통계)
+**Request**
+
+```bash
 GET /api/v1/payments?partnerId=1&status=APPROVED&limit=5&cursor=<token>
-Response
+```
 
-json
+**Response**
+
+```json
 코드 복사
 {
   "items": [{ "id": 10, "amount": 20000, "status": "APPROVED" }],
@@ -98,89 +101,95 @@ json
   "nextCursor": "eyJjcmVh...",
   "hasNext": true
 }
-❌ 결제 취소 (전체/부분)
-Request
+```
 
-bash
+❌ 결제 취소 (전체/부분)
+**Request**
+
+```bash
 코드 복사
 POST /api/v1/payments/{id}/cancel
-전체 취소
+```
+**전체 취소**
 
-json
-코드 복사
+```json
 { "reason": "user_request" }
-부분 취소
+```
+**부분 취소**
 
-json
-코드 복사
+```json
 { "reason": "partial_refund", "cancelAmount": 5000 }
-🧩 6. 외부 PG 모킹 (WireMock)
+```
+## 6. 외부 PG 모킹 (WireMock)
 Endpoint	용도	Header
 POST /api/v1/pay/credit-card	승인	API-KEY
 POST /api/v1/pay/cancel	취소	API-KEY
 
 애플리케이션은 도커 네트워크 내 http://wiremock:8080 을 사용합니다.
 
-🧪 7. 빠른 시연 스크립트 (PowerShell)
-powershell
-코드 복사
+## 7. 빠른 시연 스크립트 (PowerShell)
+```powershell
 # 1) 결제 승인
 $body = @{ partnerId=1; amount=20000; cardBin="111122"; cardLast4="3344"; productName="demo" } | ConvertTo-Json
 Invoke-RestMethod -Method Post http://localhost:8080/api/v1/payments `
   -ContentType application/json `
   -Headers @{ "Idempotency-Key"="demo-001" } `
   -Body $body
-
+```
 # 2) 결제 조회
-Invoke-RestMethod "http://localhost:8080/api/v1/payments?partnerId=1&status=APPROVED&limit=5"
-
+```Invoke-RestMethod "http://localhost:8080/api/v1/payments?partnerId=1&status=APPROVED&limit=5"
+```
 # 3) 결제 취소
-Invoke-RestMethod -Method Post http://localhost:8080/api/v1/payments/1/cancel `
+````Invoke-RestMethod -Method Post http://localhost:8080/api/v1/payments/1/cancel `
   -ContentType application/json `
   -Body (@{ reason="user_request" } | ConvertTo-Json)
 
 # 4) WireMock 요청 로그 확인
+```
 Invoke-RestMethod http://localhost:18080/__admin/requests | ConvertTo-Json -Depth 6
-🧰 8. 에러 재현 가이드
-케이스	재현 방법	기대 응답
-PG 실패 (422)	PG_API_KEY=fail-api-key 로 컨테이너 실행 후 취소	422 JSON
-인증 누락 (401)	PG_API_KEY 비움 또는 bad-key 설정	401 JSON
-입력 검증 실패	음수 금액, 빈 필드, 잘못된 자리수	400/422
-Idempotency 중복	동일 Idempotency-Key 로 승인 2회	409 JSON
+```
+## 8. 에러 재현 가이드
+### 케이스	재현 방법	기대 응답
 
-📘 9. Swagger / OpenAPI 문서
+PG 실패 (422)	PG_API_KEY=fail-api-key 로 컨테이너 실행 후 취소	| 422 JSON
+인증 누락 (401)	PG_API_KEY 비움 또는 bad-key 설정	              | 401 JSON
+입력 검증 실패	음수 금액, 빈 필드, 잘못된 자리수	              | 400/422
+Idempotency 중복	동일 Idempotency-Key 로 승인 2회	            | 409 JSON
+
+## 9. Swagger / OpenAPI 문서
 항목	주소
 Swagger UI	http://localhost:8080/swagger-ui.html
 OpenAPI Spec	http://localhost:8080/v3/api-docs
 
 Gradle 설정
 
-kotlin
-코드 복사
+```kotlin
 dependencies {
   implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.6.0")
 }
+```
 application.yml
 
-yaml
-코드 복사
+```yaml
 springdoc:
   api-docs:
     enabled: true
   swagger-ui:
     enabled: true
     path: /swagger-ui.html
-🚨 10. 에러 응답 예시 (JSON)
+```
+
+## 10. 에러 응답 예시 (JSON)
 코드	유형	예시 메시지
-400 / 422	VALIDATION_ERROR	"amount must be >= 1, cardLast4 must be 4 digits"
-401	UNAUTHORIZED	"API-KEY missing or invalid"
-404	NOT_FOUND	"Partner not found: id=999999"
-409	IDEMPOTENCY_CONFLICT	"Duplicate request with same Idempotency-Key"
-422 (PG)	OVER_CANCEL	"Cancel amount exceeds approved"
+1. 400 / 422	VALIDATION_ERROR	"amount must be >= 1, cardLast4 must be 4 digits"
+2. 401	UNAUTHORIZED	"API-KEY missing or invalid"
+3. 404	NOT_FOUND	"Partner not found: id=999999"
+4. 409	IDEMPOTENCY_CONFLICT	"Duplicate request with same Idempotency-Key"
+5. 422 (PG)	OVER_CANCEL	"Cancel amount exceeds approved"
 
 공통 응답 형식
 
-json
+```json
 코드 복사
 {
   "code": 422,
@@ -188,9 +197,9 @@ json
   "message": "Credit limit exceeded",
   "referenceId": "ref-xyz"
 }
-🧱 11. 아키텍처 구조 요약
-bash
-코드 복사
+```
+## 11. 아키텍처 구조 요약
+```bash
 modules/
  ├── domain/                  # 순수 도메인 모델 (FeePolicy, Payment)
  ├── application/             # 유스케이스, 서비스, Port
@@ -198,38 +207,37 @@ modules/
  │    └── persistence/        # JPA 엔티티/리포지토리, 페이징/통계 어댑터
  ├── external/pg-client/      # PG 연동 어댑터(Mock/TestPay)
  └── bootstrap/api-payment-gateway/  # Spring Boot Entry
+```
 하드코드 수수료(3%+100원) → 정책 테이블 기반으로 리팩터링
 도메인 계층은 프레임워크 의존 금지
 헥사고널 아키텍처 (Ports & Adapters) 유지
 
-✅ 12. 필수 요구사항 체크리스트
- 결제 승인 / 취소 정상 동작
+## 12. 필수 요구사항 체크리스트
+ - 결제 승인 / 취소 정상 동작
 
- 수수료 정책 기반 계산
+ - 수수료 정책 기반 계산
 
- 커서 기반 페이지네이션 및 통계
+ - 커서 기반 페이지네이션 및 통계
 
- Idempotency-Key 중복 방지
+ - Idempotency-Key 중복 방지
 
- 단위/통합 테스트 통과
+ - 단위/통합 테스트 통과
 
-🧩 13. 빌드 / 실행
-bash
-코드 복사
+## 13. 빌드 / 실행
+```bash
 ./gradlew build
 ./gradlew test
 ./gradlew :modules:bootstrap:api-payment-gateway:bootRun
 기본 포트: 8080
+```
 
 코드 스타일 검사
 
-bash
-코드 복사
+```bash
 ./gradlew ktlintCheck
 자동 정렬
-
-bash
-코드 복사
+```
+```bash
 ./gradlew ktlintFormat
 yaml
-코드 복사
+```
