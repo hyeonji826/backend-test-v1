@@ -14,6 +14,7 @@ dependencies {
     implementation(projects.modules.external.pgClient)
     implementation(libs.spring.boot.starter.jpa)
     implementation(libs.bundles.bootstrap)
+    implementation("org.springframework.boot:spring-boot-starter-web")
     implementation("org.mariadb.jdbc:mariadb-java-client:3.3.3")
     implementation("org.springframework.boot:spring-boot-starter-actuator")
     implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.6.0")
