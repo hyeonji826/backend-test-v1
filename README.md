@@ -94,7 +94,6 @@ GET /api/v1/payments?partnerId=1&status=APPROVED&limit=5&cursor=<token>
 **Response**
 
 ```json
-코드 복사
 {
   "items": [{ "id": 10, "amount": 20000, "status": "APPROVED" }],
   "summary": { "count": 10, "totalAmount": 200000, "totalNetAmount": 195000 },
