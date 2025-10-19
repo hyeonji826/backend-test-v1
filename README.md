@@ -173,8 +173,7 @@ Invoke-RestMethod http://localhost:18080/__admin/requests | ConvertTo-Json -Dept
 
 | 항목 | 주소 |
 |------|------|
-| **Swagger UI** | [http://localhost:8080/swagger-ui.html](http://localhost:8080/swagger-ui.html) |
-| **OpenAPI Spec** | [http://localhost:8080/v3/api-docs](http://localhost:8080/v3/api-docs) |
+| **Swagger UI** | [https://hyeonji826.github.io/backend-test-v1/](https://hyeonji826.github.io/backend-test-v1/) |
 
 **Gradle 설정**
 ```kotlin
