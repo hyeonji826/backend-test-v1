@@ -31,7 +31,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\docker-e2e.ps1
 curl http://localhost:8080/actuator/health
 ```
 
-**Swagger UI**: [https://hyeonji826.github.io/backend-test-v1/](https://hyeonji826.github.io/backend-test-v1/)
+
 
 ---
 
@@ -92,6 +92,8 @@ modules/
 ## 검증용 테스트 시나리오
 
 ### 기본 테스트 시나리오
+
+**Swagger UI**: [https://hyeonji826.github.io/backend-test-v1/](https://hyeonji826.github.io/backend-test-v1/)
 
 #### 1단계: 결제 승인 생성
 ```bash
