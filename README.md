@@ -1,144 +1,99 @@
-# 🧾 API Payment Gateway (사전 과제)
+# API Payment Gateway (사전 과제)
 
-> **과제 주제:** 나노바나 페이먼츠 결제 도메인 서버  
-> **목표:** 결제 승인/취소, 수수료 정책, 커서 기반 페이지네이션 구현 및 테스트 완성
+## 프로젝트 구성 사항
 
----
+### 핵심 기능 구현
+- 결제 승인/취소 API (WireMock 연동)
+- Idempotency-Key 기반 중복 방지
+- 파트너별 수수료 정책 적용 (정책 테이블 기반)
+- 커서 기반 페이지네이션 및 통계 조회
+- 헥사고널 아키텍처 (Port & Adapter 패턴)
 
-## 1. 개요
-
-| 항목 | 내용 |
-|------|------|
-| **프로젝트명** | API Payment Gateway |
-| **핵심 기능** | 결제 승인/취소 (WireMock), 파트너별 수수료 정책, 커서 기반 페이지네이션, Idempotency-Key 중복 방지 |
-| **언어/환경** | Kotlin + Spring Boot 3.x |
-| **DB / Infra** | MariaDB, WireMock, Docker Compose |
-| **빌드 툴** | Gradle Wrapper (Kotlin DSL) |
-
----
-
-## 2. 실행 환경
-
-- **Java** 21 (Eclipse Temurin)  
-- **Docker / Docker Compose**  
-- **Spring Boot 3.x (Kotlin)**  
-- **MariaDB**, **WireMock**
+### 개선사항 및 가산점
+- 하드코드 수수료 → 정책 테이블 기반 동적 계산
+- 다중 PG 지원 (전략 패턴 적용)
+- SpringDoc OpenAPI 문서화
+- Docker Compose 환경 구성
+- Spring Boot Actuator 운영 모니터링
+- 보안 로깅 (민감정보 제외)
+- PowerShell E2E 테스트 스크립트  
 
 ---
 
-## 3. 환경 변수 설정
+## 빠른 실행
 
-| Key | 예시값 | 설명 |
-|-----|--------|------|
-| `SPRING_PROFILES_ACTIVE` | `local-docker` | 도커 네트워크 프로파일 |
-| `PG_BASE_URL` | `http://wiremock:8080` | 외부 PG 모킹 Base URL |
-| `PG_API_KEY` | `test-api-key` | PG 호출 API Key<br>(실패 유도 시 `fail-api-key` 사용) |
-
-> 💡 모든 스크립트와 코드가 위 키 이름을 기반으로 동작합니다.
-
----
-
-## 4. DB 스키마 / 시드
-
-- `scripts/docker-e2e.ps1` 실행 시 `sql/scheme.sql` 자동 적용  
-- 기본 시드 데이터:
-  - 파트너: **TEST**, **NEW**
-  - 수수료 정책: TEST=2.5%, NEW=3.0%
-
----
-
-## 5. API 요약
-
-### ✅ 결제 승인 생성 (`POST /api/v1/payments`)
-
-**Headers**
-```
-Idempotency-Key: <string>
-```
-
-**Request**
-```json
-{
-  "partnerId": 1,
-  "amount": 20000,
-  "cardBin": "111122",
-  "cardLast4": "3344",
-  "productName": "demo"
-}
-```
-
-**Response**
-```json
-{
-  "id": 123,
-  "partnerId": 1,
-  "amount": 20000,
-  "appliedFeeRate": 0.025,
-  "feeAmount": 500,
-  "netAmount": 19500,
-  "cardLast4": "3344",
-  "approvalCode": "TESTPG-12345",
-  "approvedAt": "2025-01-01T00:00:00Z",
-  "status": "APPROVED"
-}
-```
-
----
-
-### 📊 결제 조회 (커서 기반 + 통계)
-
-**Request**
 ```bash
-GET /api/v1/payments?partnerId=1&status=APPROVED&limit=5&cursor=<token>
+# 1. 전체 환경 실행
+docker-compose up -d
+powershell -ExecutionPolicy Bypass -File .\scripts\docker-e2e.ps1
+
+# 2. API 테스트
+curl http://localhost:8080/actuator/health
 ```
 
-**Response**
-```json
-{
-  "items": [{ "id": 10, "amount": 20000, "status": "APPROVED" }],
-  "summary": { "count": 10, "totalAmount": 200000, "totalNetAmount": 195000 },
-  "nextCursor": "eyJjcmVh...",
-  "hasNext": true
-}
-```
+**Swagger UI**: [http://localhost:8080/swagger-ui.html](http://localhost:8080/swagger-ui.html)
 
 ---
 
-### ❌ 결제 취소 (전체/부분)
+## API 엔드포인트
 
-**Request**
+### 결제 승인 생성
 ```bash
-POST /api/v1/payments/{id}/cancel
+curl -X POST http://localhost:8080/api/v1/payments \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: test-001" \
+  -d '{
+    "partnerId": 1,
+    "amount": 20000,
+    "cardBin": "111122",
+    "cardLast4": "3344",
+    "productName": "테스트 상품"
+  }'
 ```
 
-**전체 취소**
-```json
-{ "reason": "user_request" }
+### 결제 조회 (통계 + 커서 페이지네이션)
+```bash
+curl "http://localhost:8080/api/v1/payments?partnerId=1&status=APPROVED&limit=5"
 ```
 
-**부분 취소**
-```json
-{ "reason": "partial_refund", "cancelAmount": 5000 }
+### 결제 취소
+```bash
+# 전체 취소
+curl -X POST http://localhost:8080/api/v1/payments/1/cancel \
+  -H "Content-Type: application/json" \
+  -d '{"reason": "고객 요청"}'
+
+# 부분 취소
+curl -X POST http://localhost:8080/api/v1/payments/1/cancel \
+  -H "Content-Type: application/json" \
+  -d '{"reason": "부분 환불", "cancelAmount": 5000}'
 ```
 
 ---
 
-## 6. 외부 PG 모킹 (WireMock)
+## 아키텍처 구조
 
-| Endpoint | 용도 | Header |
-|-----------|------|--------|
-| `POST /api/v1/pay/credit-card` | 승인 | `API-KEY` |
-| `POST /api/v1/pay/cancel` | 취소 | `API-KEY` |
+```
+modules/
+├── domain/                  # 순수 도메인 모델 (프레임워크 의존성 없음)
+├── application/             # 유스케이스, Port 인터페이스
+├── infrastructure/persistence/  # JPA 엔티티, 어댑터
+├── external/pg-client/      # PG 연동 (TestPg, MockPg)
+└── bootstrap/api-payment-gateway/  # Spring Boot 진입점
+```
 
-> 애플리케이션은 도커 네트워크 내 `http://wiremock:8080` 을 사용합니다.
+**핵심 설계 원칙**
+- **도메인 순수성**: 프레임워크 의존성 완전 제거
+- **의존성 역전**: Port & Adapter 패턴
+- **확장성**: 전략 패턴으로 다중 PG 지원
 
 ---
 
-## 7. 검증용 테스트 시나리오
+## 검증용 테스트 시나리오
 
-### **기본 테스트 시나리오**
+### 기본 테스트 시나리오
 
-#### **1단계: 결제 승인 생성**
+#### 1단계: 결제 승인 생성
 ```bash
 # 정상 결제 승인
 curl -X POST http://localhost:8080/api/v1/payments \
@@ -170,7 +125,7 @@ curl -X POST http://localhost:8080/api/v1/payments \
 }
 ```
 
-#### **2단계: 결제 조회 (통계 포함)**
+#### 2단계: 결제 조회 (통계 포함)
 ```bash
 # 기본 조회
 curl "http://localhost:8080/api/v1/payments?partnerId=1&status=APPROVED&limit=5"
@@ -425,17 +380,7 @@ modules/
 
 ---
 
-## 12. 필수 요구사항 체크리스트
-
-- [x] 결제 승인 / 취소 정상 동작  
-- [x] 수수료 정책 기반 계산  
-- [x] 커서 기반 페이지네이션 및 통계  
-- [x] Idempotency-Key 중복 방지  
-- [x] 단위/통합 테스트 통과  
-
----
-
-## 13. 빌드 / 실행
+## 빌드 및 실행
 
 ```bash
 ./gradlew build
