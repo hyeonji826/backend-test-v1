@@ -43,8 +43,6 @@ powershell -ExecutionPolicy Bypass -File .\scripts\docker-e2e.ps1
 curl http://localhost:8080/actuator/health
 ```
 
-**Swagger UI**: [http://localhost:8080/swagger-ui.html](http://localhost:8080/swagger-ui.html)
-
 ---
 
 ## 3. API 엔드포인트 (명령만)
@@ -78,6 +76,8 @@ curl -X POST http://localhost:8080/api/v1/payments/1/cancel \
 ---
 
 ## 4. 빠른 검증 시나리오
+
+**Swagger UI**: [https://hyeonji826.github.io/backend-test-v1/](https://hyeonji826.github.io/backend-test-v1/)
 
 아래 값 그대로 사용하면 수수료 2.5% 기준으로 손익 계산이 딱 떨어지며, 목록·취소·중복키까지 한 번에 검증 가능.
 
