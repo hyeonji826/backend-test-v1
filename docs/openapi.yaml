@@ -1,0 +1,195 @@
+openapi: 3.0.3
+info:
+  title: API Payment Gateway
+  version: "1.0.0"
+  description: |
+    나노바나나 페이먼츠 사전 과제용 API 문서.
+    - 결제 승인 생성
+    - 결제 조회(커서 기반 + 통계)
+    - 결제 취소(전체/부분)
+servers:
+  - url: http://localhost:8080
+    description: Local
+
+tags:
+  - name: Payments
+    description: 결제 승인/조회/취소
+
+paths:
+  /api/v1/payments:
+    post:
+      tags: [Payments]
+      summary: 결제 승인 생성
+      operationId: createPayment
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+          description: 중복 요청 방지 키
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PaymentRequest'
+      responses:
+        '201':
+          description: 승인 성공
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentResponse'
+        '400':
+          description: 잘못된 요청
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '409':
+          description: Idempotency-Key 중복
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '422':
+          description: PG/검증 실패
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+    get:
+      tags: [Payments]
+      summary: 결제 조회 (커서 기반 + 통계)
+      operationId: listPayments
+      parameters:
+        - name: partnerId
+          in: query
+          required: false
+          schema: { type: integer, format: int64 }
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [APPROVED, CANCELED, PARTIALLY_CANCELED, DECLINED]
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100, default: 10 }
+        - name: cursor
+          in: query
+          required: false
+          schema: { type: string }
+      responses:
+        '200':
+          description: 조회 성공
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentListResponse'
+
+  /api/v1/payments/{id}/cancel:
+    post:
+      tags: [Payments]
+      summary: 결제 취소 (전체/부분)
+      operationId: cancelPayment
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, format: int64 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CancelRequest'
+      responses:
+        '200':
+          description: 취소 성공
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentResponse'
+        '400':
+          description: 잘못된 요청
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '404':
+          description: 결제 없음
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '422':
+          description: 과취소(OVER_CANCEL) 등
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+components:
+  schemas:
+    PaymentRequest:
+      type: object
+      required: [partnerId, amount, cardBin, cardLast4, productName]
+      properties:
+        partnerId: { type: integer, format: int64, example: 1 }
+        amount: { type: integer, minimum: 1, example: 20000 }
+        cardBin: { type: string, example: "111122" }
+        cardLast4: { type: string, minLength: 4, maxLength: 4, example: "3344" }
+        productName: { type: string, example: "demo" }
+
+    PaymentResponse:
+      type: object
+      properties:
+        id: { type: integer, format: int64, example: 123 }
+        partnerId: { type: integer, format: int64, example: 1 }
+        amount: { type: integer, example: 20000 }
+        appliedFeeRate: { type: number, format: float, example: 0.025 }
+        feeAmount: { type: integer, example: 500 }
+        netAmount: { type: integer, example: 19500 }
+        cardLast4: { type: string, example: "3344" }
+        approvalCode: { type: string, example: "TESTPG-12345" }
+        approvedAt: { type: string, format: date-time, example: "2025-01-01T00:00:00Z" }
+        status:
+          type: string
+          enum: [APPROVED, CANCELED, PARTIALLY_CANCELED, DECLINED]
+
+    PaymentListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: integer, format: int64, example: 10 }
+              amount: { type: integer, example: 20000 }
+              status:
+                type: string
+                enum: [APPROVED, CANCELED, PARTIALLY_CANCELED, DECLINED]
+        summary:
+          type: object
+          properties:
+            count: { type: integer, example: 10 }
+            totalAmount: { type: integer, example: 200000 }
+            totalNetAmount: { type: integer, example: 195000 }
+        nextCursor: { type: string, example: "eyJjcmVh..." }
+        hasNext: { type: boolean, example: true }
+
+    CancelRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason: { type: string, example: "user_request" }
+        cancelAmount:
+          type: integer
+          nullable: true
+          description: 부분 취소 시 금액
+
+    ErrorResponse:
+      type: object
+      properties:
+        code: { type: integer, example: 422 }
+        errorCode: { type: string, example: "OVER_CANCEL" }
+        message: { type: string, example: "Cancel amount exceeds approved" }
+        referenceId: { type: string, example: "ref-xyz" }

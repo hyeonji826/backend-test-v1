@@ -247,13 +247,45 @@ modules/
 
 ## 13. 빌드 / 실행
 
+다음 중 편한 방법을 선택해 실행하세요.
+
+- 옵션 A) 전체 Docker E2E 실행(권장, Windows PowerShell)
+- 옵션 B) Docker로 인프라만 띄우고, 애플리케이션은 로컬 Gradle로 실행
+- 옵션 C) 순수 Gradle 빌드/테스트만 수행
+
+---
+
+옵션 A) 전체 Docker E2E 실행 (PowerShell)
+```powershell
+# 애플리케이션, MariaDB, WireMock 모두 컨테이너로 실행 + 스키마/시드 자동 적용
+.\scripts\docker-e2e.ps1
+```
+
+---
+
+옵션 B) 인프라(Docker) + 앱은 로컬 실행 (PowerShell)
+```powershell
+# 1) DB/WireMock 컨테이너만 실행
+docker compose up -d mariadb wiremock
+
+# 2) 애플리케이션 실행에 필요한 환경 변수 설정
+$env:SPRING_PROFILES_ACTIVE = "local-docker"
+$env:PG_BASE_URL = "http://wiremock:8080"
+$env:PG_API_KEY = "test-api-key"   # 실패 케이스 유도 시 fail-api-key 사용
+
+# 3) 로컬에서 Spring Boot 실행
+.\gradlew.bat :modules:bootstrap:api-payment-gateway:bootRun
+```
+
+---
+
+옵션 C) Gradle 빌드/테스트 (Windows/Unix 공통)
 ```bash
 ./gradlew build
 ./gradlew test
-./gradlew :modules:bootstrap:api-payment-gateway:bootRun
 ```
 
-> 기본 포트: **8080**
+> 애플리케이션 기본 포트: **8080**  |  WireMock 포트: **18080**  |  MariaDB 포트: **3306**
 
 **코드 스타일 검사**
 ```bash
