@@ -1,116 +1,103 @@
 # API Payment Gateway (사전 과제)
 
-## 프로젝트 구성 사항
+## 1. 프로젝트 구성 (요약)
 
-### 핵심 기능 구현
-- 결제 승인/취소 API (WireMock 연동)
-- Idempotency-Key 기반 중복 방지
-- 파트너별 수수료 정책 적용 (정책 테이블 기반)
-- 커서 기반 페이지네이션 및 통계 조회
-- 헥사고널 아키텍처 (Port & Adapter 패턴)
+### 핵심 기능
+- 결제 승인·취소 (WireMock)
+- Idempotency-Key 중복 방지
+- 파트너별 수수료 정책
+- 커서 페이지네이션 + 통계
+- 헥사고널 아키텍처 (Ports & Adapters)
 
-### 개선사항 및 가산점
-- 하드코드 수수료 → 정책 테이블 기반 동적 계산
-- 다중 PG 지원 (전략 패턴 적용)
-- SpringDoc OpenAPI 문서화
-- MariaDB Docker Compose 환경 구성 (외부 DB 연동)
-- Spring Boot Actuator 운영 모니터링
-- 보안 로깅 (민감정보 제외)
-- PowerShell E2E 테스트 스크립트  
+### 가산점/개선
+- 정책 테이블 기반 수수료
+- 다중 PG (전략 패턴)
+- SpringDoc OpenAPI
+- MariaDB + Docker Compose
+- Spring Boot Actuator
+- 보안 로깅
+- PowerShell E2E 스크립트
+
+### 모듈 구조
+```
+modules/
+├─ domain/                     # 순수 도메인 (의존성 없음)
+├─ application/                # 유스케이스, Port 인터페이스
+├─ infrastructure/persistence/ # JPA 엔티티, 리포지토리, 어댑터
+├─ external/pg-client/         # PG 연동 (Mock/TestPg)
+└─ bootstrap/api-payment-gateway/ # Spring Boot 진입점
+```
 
 ---
 
-## 빠른 실행
+## 2. 빠른 실행
 
+### 전체 구동
 ```bash
-# 1. 전체 환경 실행
 docker-compose up -d
 powershell -ExecutionPolicy Bypass -File .\scripts\docker-e2e.ps1
+```
 
-# 2. API 테스트
+### 상태 확인
+```bash
 curl http://localhost:8080/actuator/health
 ```
 
-
+**Swagger UI**: [http://localhost:8080/swagger-ui.html](http://localhost:8080/swagger-ui.html)
 
 ---
 
-## API 엔드포인트
+## 3. API 엔드포인트 (명령만)
 
 ### 결제 승인 생성
 ```bash
 curl -X POST http://localhost:8080/api/v1/payments \
   -H "Content-Type: application/json" \
   -H "Idempotency-Key: test-001" \
-  -d '{
-    "partnerId": 1,
-    "amount": 20000,
-    "cardBin": "111122",
-    "cardLast4": "3344",
-    "productName": "테스트 상품"
-  }'
+  -d '{"partnerId":1,"amount":20000,"cardBin":"111122","cardLast4":"3344","productName":"테스트 상품"}'
 ```
 
-### 결제 조회 (통계 + 커서 페이지네이션)
+### 결제 목록 (통계+커서)
 ```bash
 curl "http://localhost:8080/api/v1/payments?partnerId=1&status=APPROVED&limit=5"
 ```
 
-### 결제 취소
+### 결제 취소 (전체/부분)
 ```bash
-# 전체 취소
+# 전체
 curl -X POST http://localhost:8080/api/v1/payments/1/cancel \
   -H "Content-Type: application/json" \
-  -d '{"reason": "고객 요청"}'
+  -d '{"reason":"고객 요청"}'
 
-# 부분 취소
+# 부분 (5,000원)
 curl -X POST http://localhost:8080/api/v1/payments/1/cancel \
   -H "Content-Type: application/json" \
-  -d '{"reason": "부분 환불", "cancelAmount": 5000}'
+  -d '{"reason":"부분 환불","cancelAmount":5000}'
 ```
 
 ---
 
-## 아키텍처 구조
+## 4. 빠른 검증 시나리오
 
-```
-modules/
-├── domain/                  # 순수 도메인 모델 (프레임워크 의존성 없음)
-├── application/             # 유스케이스, Port 인터페이스
-├── infrastructure/persistence/  # JPA 엔티티, 어댑터
-├── external/pg-client/      # PG 연동 (TestPg, MockPg)
-└── bootstrap/api-payment-gateway/  # Spring Boot 진입점
-```
+아래 값 그대로 사용하면 수수료 2.5% 기준으로 손익 계산이 딱 떨어지며, 목록·취소·중복키까지 한 번에 검증 가능.
 
-**핵심 설계 원칙**
-- **도메인 순수성**: 프레임워크 의존성 완전 제거
-- **의존성 역전**: Port & Adapter 패턴
-- **확장성**: 전략 패턴으로 다중 PG 지원
+### 4.1 승인 생성 (성공)
 
----
+**넣을 숫자**
+- partnerId=1
+- amount=20000
+- cardBin="111122", cardLast4="3344"
+- Idempotency-Key="demo-001"
+- productName="demo"
 
-## 검증용 테스트 시나리오
-
-### 기본 테스트 시나리오
-
-**Swagger UI**: [https://hyeonji826.github.io/backend-test-v1/](https://hyeonji826.github.io/backend-test-v1/)
-
-#### 1단계: 결제 승인 생성
 ```bash
-# 정상 결제 승인
 curl -X POST http://localhost:8080/api/v1/payments \
   -H "Content-Type: application/json" \
-  -H "Idempotency-Key: test-payment-001" \
-  -d '{
-    "partnerId": 1,
-    "amount": 20000,
-    "cardBin": "111122",
-    "cardLast4": "3344",
-    "productName": "테스트 상품"
-  }'
+  -H "Idempotency-Key: demo-001" \
+  -d '{"partnerId":1,"amount":20000,"cardBin":"111122","cardLast4":"3344","productName":"demo"}'
 ```
 
-**예상 응답:**
+**예상 결과 (요지)**
 ```json
 {
   "id": 1,
@@ -121,285 +108,221 @@ curl -X POST http://localhost:8080/api/v1/payments \
   "netAmount": 19500,
   "cardLast4": "3344",
   "approvalCode": "TESTPG-12345",
-  "approvedAt": "2025-01-01T00:00:00Z",
-  "status": "APPROVED",
-  "createdAt": "2025-01-01T00:00:00Z"
+  "status": "APPROVED"
 }
 ```
 
-#### 2단계: 결제 조회 (통계 포함)
-```bash
-# 기본 조회
-curl "http://localhost:8080/api/v1/payments?partnerId=1&status=APPROVED&limit=5"
+### 4.2 목록/통계 확인 (커서 X)
 
-# 커서 페이지네이션
-curl "http://localhost:8080/api/v1/payments?partnerId=1&status=APPROVED&limit=3&cursor=eyJjcmVhdGVkQXQiOiIyMDI1LTAxLTAxVDAwOjAwOjAwWiIsImlkIjoxfQ"
+**넣을 숫자**
+- partnerId=1
+- status=APPROVED
+- limit=5
+
+```bash
+curl "http://localhost:8080/api/v1/payments?partnerId=1&status=APPROVED&limit=5"
 ```
 
-**예상 응답:**
+**예상 결과 (요지)**
 ```json
 {
   "items": [
     {
       "id": 1,
-      "partnerId": 1,
       "amount": 20000,
       "appliedFeeRate": 0.025,
       "feeAmount": 500,
       "netAmount": 19500,
-      "cardLast4": "3344",
-      "approvalCode": "TESTPG-12345",
-      "approvedAt": "2025-01-01T00:00:00Z",
-      "status": "APPROVED",
-      "createdAt": "2025-01-01T00:00:00Z",
-      "updatedAt": "2025-01-01T00:00:00Z"
+      "status": "APPROVED"
     }
   ],
-  "summary": {
-    "count": 1,
-    "totalAmount": "20000",
-    "totalNetAmount": "19500"
-  },
-  "nextCursor": null,
+  "summary": { "count": 1, "totalAmount": "20000", "totalNetAmount": "19500" },
   "hasNext": false
 }
 ```
 
-#### **3단계: 결제 취소**
+### 4.3 부분 취소 (5,000원)
+
+**넣을 숫자**
+- paymentId=1
+- cancelAmount=5000
+- reason="부분 환불"
+
 ```bash
-# 전체 취소
 curl -X POST http://localhost:8080/api/v1/payments/1/cancel \
   -H "Content-Type: application/json" \
-  -d '{
-    "reason": "고객 요청"
-  }'
+  -d '{"reason":"부분 환불","cancelAmount":5000}'
+```
 
-# 부분 취소
+**예상 결과 (요지)**
+```json
+{
+  "id": 1,
+  "status": "PARTIALLY_CANCELED",
+  "canceledAmount": 5000
+}
+```
+
+### 4.4 전체 취소
+
+**넣을 숫자**
+- paymentId=1
+- reason="고객 요청"
+
+```bash
 curl -X POST http://localhost:8080/api/v1/payments/1/cancel \
   -H "Content-Type: application/json" \
-  -d '{
-    "reason": "부분 환불",
-    "cancelAmount": 5000
-  }'
+  -d '{"reason":"고객 요청"}'
 ```
 
-### **에러 케이스 테스트**
-
-#### **Idempotency-Key 중복 테스트**
-```bash
-# 동일한 키로 두 번 요청
-curl -X POST http://localhost:8080/api/v1/payments \
-  -H "Content-Type: application/json" \
-  -H "Idempotency-Key: duplicate-test" \
-  -d '{"partnerId": 1, "amount": 10000, "cardLast4": "1234", "productName": "test"}'
-
-# 동일한 키로 재요청 (409 에러 예상)
-curl -X POST http://localhost:8080/api/v1/payments \
-  -H "Content-Type: application/json" \
-  -H "Idempotency-Key: duplicate-test" \
-  -d '{"partnerId": 1, "amount": 10000, "cardLast4": "1234", "productName": "test"}'
+**예상 결과 (요지)**
+```json
+{ "id": 1, "status": "CANCELED" }
 ```
 
-#### **입력 검증 실패 테스트**
-```bash
-# 음수 금액 (400 에러)
-curl -X POST http://localhost:8080/api/v1/payments \
-  -H "Content-Type: application/json" \
-  -H "Idempotency-Key: invalid-amount" \
-  -d '{"partnerId": 1, "amount": -1000, "cardLast4": "1234", "productName": "test"}'
+### 4.5 Idempotency-Key 중복 (409)
 
-# 잘못된 카드번호 (400 에러)
+**넣을 숫자**
+- 같은 바디
+- 같은 키 Idempotency-Key="dup-001"
+
+```bash
+# 1회차 (성공)
 curl -X POST http://localhost:8080/api/v1/payments \
-  -H "Content-Type: application/json" \
-  -H "Idempotency-Key: invalid-card" \
-  -d '{"partnerId": 1, "amount": 10000, "cardLast4": "123", "productName": "test"}'
+  -H "Content-Type: application/json" -H "Idempotency-Key: dup-001" \
+  -d '{"partnerId":1,"amount":10000,"cardLast4":"1234","productName":"test"}'
+
+# 2회차 (중복 -> 409)
+curl -X POST http://localhost:8080/api/v1/payments \
+  -H "Content-Type: application/json" -H "Idempotency-Key: dup-001" \
+  -d '{"partnerId":1,"amount":10000,"cardLast4":"1234","productName":"test"}'
 ```
 
-#### **존재하지 않는 파트너 (404 에러)**
-```bash
-curl -X POST http://localhost:8080/api/v1/payments \
-  -H "Content-Type: application/json" \
-  -H "Idempotency-Key: invalid-partner" \
-  -d '{"partnerId": 999999, "amount": 10000, "cardLast4": "1234", "productName": "test"}'
+**예상 결과 (요지)**
+```json
+{ "code": 409, "errorCode": "IDEMPOTENCY_CONFLICT" }
 ```
 
-### 📊 **수수료 정책 테스트**
+### 4.6 입력 검증 실패 (400/422)
 
-#### **다른 파트너로 결제 (수수료 차이 확인)**
+**넣을 숫자**
+- 음수 금액 amount=-1000
+- 잘못된 자리수 cardLast4="123"
+
 ```bash
-# TEST 파트너 (2.5% 수수료)
 curl -X POST http://localhost:8080/api/v1/payments \
-  -H "Content-Type: application/json" \
-  -H "Idempotency-Key: test-partner-fee" \
-  -d '{"partnerId": 1, "amount": 20000, "cardLast4": "1111", "productName": "TEST 파트너"}'
+  -H "Content-Type: application/json" -H "Idempotency-Key: invalid-amount" \
+  -d '{"partnerId":1,"amount":-1000,"cardLast4":"1234","productName":"test"}'
 
-# NEW 파트너 (3.0% 수수료)
 curl -X POST http://localhost:8080/api/v1/payments \
-  -H "Content-Type: application/json" \
-  -H "Idempotency-Key: new-partner-fee" \
-  -d '{"partnerId": 2, "amount": 20000, "cardLast4": "2222", "productName": "NEW 파트너"}'
+  -H "Content-Type: application/json" -H "Idempotency-Key: invalid-card" \
+  -d '{"partnerId":1,"amount":10000,"cardLast4":"123","productName":"test"}'
 ```
 
-### 🐳 **Docker 환경 테스트**
-
-#### **전체 환경 실행**
-```bash
-# 1. Docker Compose 실행
-docker-compose up -d
-
-# 2. 스키마 및 시드 데이터 적용
-powershell -ExecutionPolicy Bypass -File .\scripts\docker-e2e.ps1
-
-# 3. API 테스트
-curl http://localhost:8080/actuator/health
+**예상 결과 (요지)**
+```json
+{ "code": 422, "errorCode": "VALIDATION_ERROR" }
 ```
 
-#### **WireMock 요청 로그 확인**
+### 4.7 존재하지 않는 파트너 (404)
+
+**넣을 숫자**
+- partnerId=999999
+
 ```bash
-# WireMock 요청 기록 확인
+curl -X POST http://localhost:8080/api/v1/payments \
+  -H "Content-Type: application/json" -H "Idempotency-Key: invalid-partner" \
+  -d '{"partnerId":999999,"amount":10000,"cardLast4":"1234","productName":"test"}'
+```
+
+**예상 결과 (요지)**
+```json
+{ "code": 404, "errorCode": "NOT_FOUND" }
+```
+
+### 4.8 수수료 정책 비교 (파트너별)
+
+**넣을 숫자**
+- TEST 파트너: partnerId=1 → 2.5%
+- NEW 파트너: partnerId=2 → 3.0%
+- 동일 금액 amount=20000
+
+```bash
+# TEST (2.5%)
+curl -X POST http://localhost:8080/api/v1/payments \
+  -H "Content-Type: application/json" -H "Idempotency-Key: fee-test" \
+  -d '{"partnerId":1,"amount":20000,"cardLast4":"1111","productName":"TEST 파트너"}'
+
+# NEW (3.0%)
+curl -X POST http://localhost:8080/api/v1/payments \
+  -H "Content-Type: application/json" -H "Idempotency-Key: fee-new" \
+  -d '{"partnerId":2,"amount":20000,"cardLast4":"2222","productName":"NEW 파트너"}'
+```
+
+**예상 결과 (요지)**
+```json
+# TEST
+{ "appliedFeeRate": 0.025, "feeAmount": 500, "netAmount": 19500 }
+
+# NEW
+{ "appliedFeeRate": 0.03,  "feeAmount": 600, "netAmount": 19400 }
+```
+
+### 4.9 WireMock 요청 로그
+```bash
 curl http://localhost:18080/__admin/requests | jq '.requests[] | {method: .request.method, url: .request.url, status: .response.status}'
 ```
 
-### 📋 **면접관 체크리스트**
-
-#### **기본 기능 검증**
-- [ ] 결제 승인 생성 (200 OK)
-- [ ] 수수료 계산 정확성 (TEST: 2.5%, NEW: 3.0%)
-- [ ] 결제 조회 및 통계 (summary 정확성)
-- [ ] 커서 페이지네이션 (nextCursor, hasNext)
-- [ ] 결제 취소 (전체/부분)
-
-#### **에러 처리 검증**
-- [ ] Idempotency-Key 중복 (409 Conflict)
-- [ ] 입력 검증 실패 (400/422)
-- [ ] 존재하지 않는 파트너 (404)
-- [ ] 잘못된 취소 금액 (422)
-
-#### **아키텍처 검증**
-- [ ] Swagger UI 접근 가능
-- [ ] WireMock 연동 확인
-- [ ] 데이터베이스 스키마 적용
-- [ ] 로그 레벨 설정 (DEBUG)
-
-### 🚀 **빠른 시연 스크립트 (PowerShell)**
-
-```powershell
-# 1) 결제 승인
-$body = @{ partnerId=1; amount=20000; cardBin="111122"; cardLast4="3344"; productName="demo" } | ConvertTo-Json
-Invoke-RestMethod -Method Post http://localhost:8080/api/v1/payments `
-  -ContentType application/json `
-  -Headers @{ "Idempotency-Key"="demo-001" } `
-  -Body $body
-
-# 2) 결제 조회
-Invoke-RestMethod "http://localhost:8080/api/v1/payments?partnerId=1&status=APPROVED&limit=5"
-
-# 3) 결제 취소
-Invoke-RestMethod -Method Post http://localhost:8080/api/v1/payments/1/cancel `
-  -ContentType application/json `
-  -Body (@{ reason="user_request" } | ConvertTo-Json)
-
-# 4) WireMock 요청 로그 확인
-Invoke-RestMethod http://localhost:18080/__admin/requests | ConvertTo-Json -Depth 6
-```
+**예상 확인 포인트**: 승인/취소 호출이 200/201/204/422 등으로 기록되는지, URL 경로/메서드가 시나리오와 일치하는지
 
 ---
 
-## 8. 에러 재현 가이드
+## 5. 에러 재현 (환경 변수 기반)
 
 | 케이스 | 재현 방법 | 기대 응답 |
 |--------|------------|------------|
-| **PG 실패 (422)** | `PG_API_KEY=fail-api-key` 로 컨테이너 실행 후 취소 | 422 JSON |
-| **인증 누락 (401)** | `PG_API_KEY` 비움 또는 `bad-key` 설정 | 401 JSON |
-| **입력 검증 실패** | 음수 금액, 빈 필드, 잘못된 자리수 | 400/422 |
-| **Idempotency 중복** | 동일 `Idempotency-Key` 로 승인 2회 | 409 JSON |
+| PG 실패 (422) | 컨테이너에 `PG_API_KEY=fail-api-key` 설정 후 취소 호출 | 422 |
+| 인증 누락 (401) | `PG_API_KEY` 비우거나 `bad-key` | 401 |
+| Idempotency 중복 | 동일 키로 승인 2회 | 409 |
+| 검증 실패 | 음수 금액·자리수 오류 | 400/422 |
 
----
-
-## 9. Swagger / OpenAPI 문서
-
-| 항목 | 주소 |
-|------|------|
-| **Swagger UI** | [http://localhost:8080/swagger-ui.html](http://localhost:8080/swagger-ui.html) |
-| **OpenAPI Spec** | [http://localhost:8080/v3/api-docs](http://localhost:8080/v3/api-docs) |
-
-**Gradle 설정**
-```kotlin
-dependencies {
-  implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.6.0")
-}
-```
-
-**application.yml**
-```yaml
-springdoc:
-  api-docs:
-    enabled: true
-  swagger-ui:
-    enabled: true
-    path: /swagger-ui.html
-```
-
----
-
-## 10. 에러 응답 예시 (JSON)
-
-| 코드 | 유형 | 예시 메시지 |
-|------|------|--------------|
-| 400 / 422 | VALIDATION_ERROR | `"amount must be >= 1, cardLast4 must be 4 digits"` |
-| 401 | UNAUTHORIZED | `"API-KEY missing or invalid"` |
-| 404 | NOT_FOUND | `"Partner not found: id=999999"` |
-| 409 | IDEMPOTENCY_CONFLICT | `"Duplicate request with same Idempotency-Key"` |
-| 422 (PG) | OVER_CANCEL | `"Cancel amount exceeds approved"` |
-
-**공통 응답 형식**
+**공통 에러 포맷 (예시)**
 ```json
-{
-  "code": 422,
-  "errorCode": "INSUFFICIENT_LIMIT",
-  "message": "Credit limit exceeded",
-  "referenceId": "ref-xyz"
-}
+{ "code": 422, "errorCode": "INSUFFICIENT_LIMIT", "message": "...", "referenceId": "ref-xyz" }
 ```
 
 ---
 
-## 11. 아키텍처 구조 요약
+## 6. 빌드·실행·코드 스타일
 
-```bash
-modules/
- ├── domain/                  # 순수 도메인 모델 (FeePolicy, Payment)
- ├── application/             # 유스케이스, 서비스, Port
- ├── infrastructure/
- │    └── persistence/        # JPA 엔티티/리포지토리, 페이징/통계 어댑터
- ├── external/pg-client/      # PG 연동 어댑터(Mock/TestPay)
- └── bootstrap/api-payment-gateway/  # Spring Boot Entry
-```
-
-> 하드코드 수수료(3%+100원) → 정책 테이블 기반으로 리팩터링  
-> 도메인 계층은 프레임워크 의존 금지  
-> 헥사고널 아키텍처 (Ports & Adapters) 유지
-
----
-
-## 빌드 및 실행
-
+### 빌드/테스트/실행
 ```bash
 ./gradlew build
 ./gradlew test
 ./gradlew :modules:bootstrap:api-payment-gateway:bootRun
-powershell -ExecutionPolicy Bypass -File .\scripts\docker-e2e.ps1
-
 ```
 
-> 기본 포트: **8080**
+### E2E 초기화
+```bash
+powershell -ExecutionPolicy Bypass -File .\scripts\docker-e2e.ps1
+```
 
-**코드 스타일 검사**
+**포트**: 8080
+
+### 스타일 체크/정렬
 ```bash
 ./gradlew ktlintCheck
-```
-
-**자동 정렬**
-```bash
 ./gradlew ktlintFormat
 ```
+
+---
+
+## 기술 스택
+
+- **언어**: Kotlin 1.9.25, Java 21
+- **프레임워크**: Spring Boot 3.4.4
+- **데이터베이스**: MariaDB 10.11
+- **빌드**: Gradle (Kotlin DSL)
+- **컨테이너**: Docker Compose
+- **모킹**: WireMock 3.9.1
+- **문서화**: SpringDoc OpenAPI
