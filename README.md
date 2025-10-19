@@ -31,7 +31,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\docker-e2e.ps1
 curl http://localhost:8080/actuator/health
 ```
 
-**Swagger UI**: [http://localhost:8080/swagger-ui.html](http://localhost:8080/swagger-ui.html)
+**Swagger UI**: [https://hyeonji826.github.io/backend-test-v1/](https://hyeonji826.github.io/backend-test-v1/)
 
 ---
 
