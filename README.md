@@ -13,7 +13,7 @@
 - 하드코드 수수료 → 정책 테이블 기반 동적 계산
 - 다중 PG 지원 (전략 패턴 적용)
 - SpringDoc OpenAPI 문서화
-- Docker Compose 환경 구성
+- MariaDB Docker Compose 환경 구성 (외부 DB 연동)
 - Spring Boot Actuator 운영 모니터링
 - 보안 로깅 (민감정보 제외)
 - PowerShell E2E 테스트 스크립트  
