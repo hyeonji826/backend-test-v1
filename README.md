@@ -43,41 +43,209 @@ powershell -ExecutionPolicy Bypass -File .\scripts\docker-e2e.ps1
 curl http://localhost:8080/actuator/health
 ```
 
+<!-- 링크 제거: 면접 환경에서 열리지 않을 수 있어 제외 -->
+
 ---
 
-## 3. API 엔드포인트 (명령만)
+## 3. API 엔드포인트 (핵심 코드)
 
-### 결제 승인 생성
-```bash
-curl -X POST http://localhost:8080/api/v1/payments \
-  -H "Content-Type: application/json" \
-  -H "Idempotency-Key: test-001" \
-  -d '{"partnerId":1,"amount":20000,"cardBin":"111122","cardLast4":"3344","productName":"테스트 상품"}'
+### 결제 승인 생성 (@PostMapping)
+```34:66:modules/bootstrap/api-payment-gateway/src/main/kotlin/im/bigs/pg/api/payment/PaymentController.kt
+    @PostMapping
+    fun create(
+        @Parameter(description = "Idempotency-Key", required = true)
+        @RequestHeader(value = "Idempotency-Key", required = false) idemKey: String?,
+        @RequestBody @jakarta.validation.Valid req: CreatePaymentRequest,
+    ): ResponseEntity<PaymentResponse> {
+        if (!idemKey.isNullOrBlank() && idemStore.isDuplicate(idemKey)) {
+            throw ConflictException("Duplicate Idempotency-Key")
+        }
+        val saved =
+            paymentUseCase.pay(
+                PaymentCommand(
+                    partnerId = req.partnerId,
+                    amount = req.amount,
+                    cardBin = req.cardBin?.takeIf { it.isNotBlank() }?.take(6),
+                    cardLast4 = req.cardLast4,
+                    productName = req.productName,
+                ),
+            )
+        if (!idemKey.isNullOrBlank() && saved.id != null) {
+            idemStore.put(idemKey, saved.id!!)
+        }
+        return ResponseEntity.ok(PaymentResponse.from(saved))
+    }
 ```
 
-### 결제 목록 (통계+커서)
-```bash
-curl "http://localhost:8080/api/v1/payments?partnerId=1&status=APPROVED&limit=5"
+### 결제 목록 조회 (커서+통계, @GetMapping)
+```46:106:modules/bootstrap/api-payment-gateway/src/main/kotlin/im/bigs/pg/bootstrap/api/web/PaymentQueryController.kt
+@Validated
+@RestController
+@RequestMapping("/api/v1/payments")
+class PaymentQueryController(
+    private val svc: QueryPaymentsAdapterService,
+) {
+    @GetMapping
+    fun getPayments(
+        @RequestParam(required = false) partnerId: Long?,
+        @RequestParam(required = false) status: String?,
+        @RequestParam(required = false)
+        @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) from: Instant?,
+        @RequestParam(required = false)
+        @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) to: Instant?,
+        @RequestParam(required = false) cursor: String?,
+        @RequestParam(defaultValue = "20") @Min(1) @Max(100) limit: Int,
+    ): ResponseEntity<PaymentsResponse> {
+        val r =
+            svc.execute(
+                Query(
+                    partnerId = partnerId,
+                    status = status,
+                    from = from,
+                    to = to,
+                    limit = limit,
+                    cursor = cursor,
+                ),
+            )
+        val iso = java.time.format.DateTimeFormatter.ISO_INSTANT
+        val itemsDto = r.items.map { p ->
+            PaymentItemDto(
+                id = p.id,
+                partnerId = p.partnerId,
+                amount = p.amount,
+                appliedFeeRate = p.appliedFeeRate,
+                feeAmount = p.feeAmount,
+                netAmount = p.netAmount,
+                cardBin = p.cardBin,
+                cardLast4 = p.cardLast4,
+                approvalCode = p.approvalCode,
+                approvedAt = iso.format(p.approvedAt.toInstant(java.time.ZoneOffset.UTC)),
+                status = p.status.name,
+                createdAt = iso.format(p.createdAt.toInstant(java.time.ZoneOffset.UTC)),
+                updatedAt = iso.format(p.updatedAt.toInstant(java.time.ZoneOffset.UTC)),
+            )
+        }
+        val body =
+            PaymentsResponse(
+                items = itemsDto,
+                summary =
+                    SummaryDto(
+                        count = r.summary.count,
+                        totalAmount = r.summary.totalAmount.toPlainString(),
+                        totalNetAmount = r.summary.totalNetAmount.toPlainString(),
+                    ),
+                nextCursor = r.nextCursor,
+                hasNext = r.hasNext,
+            )
+        return ResponseEntity.ok(body)
+    }
+}
 ```
 
-### 결제 취소 (전체/부분)
-```bash
-# 전체
-curl -X POST http://localhost:8080/api/v1/payments/1/cancel \
-  -H "Content-Type: application/json" \
-  -d '{"reason":"고객 요청"}'
+### 결제 취소 (전체/부분, @PostMapping)
+```68:84:modules/bootstrap/api-payment-gateway/src/main/kotlin/im/bigs/pg/api/payment/PaymentController.kt
+    @PostMapping("/{id}/cancel")
+    fun cancel(
+        @PathVariable id: Long,
+        @RequestBody req: im.bigs.pg.api.payment.dto.CancelPaymentRequest,
+    ): ResponseEntity<PaymentResponse> {
+        val p = paymentUseCase.cancel(im.bigs.pg.application.payment.port.`in`.CancelCommand(id, req.cancelAmount, req.reason))
+        return ResponseEntity.ok(PaymentResponse.from(p))
+    }
+```
 
-# 부분 (5,000원)
-curl -X POST http://localhost:8080/api/v1/payments/1/cancel \
-  -H "Content-Type: application/json" \
-  -d '{"reason":"부분 환불","cancelAmount":5000}'
+---
+
+## 3.5 핵심 구현 코드 발췌
+
+### 커서 기반 페이지 쿼리 (JPA)
+```kotlin
+@Query(
+    """
+    select p from PaymentEntity p
+    where (:partnerId is null or p.partnerId = :partnerId)
+      and (:status is null or p.status = :status)
+      and (:fromAt is null or p.createdAt >= :fromAt)
+      and (:toAt is null or p.createdAt < :toAt)
+      and (
+            (:cursorCreatedAt is null and :cursorId is null)
+         or (p.createdAt < :cursorCreatedAt)
+         or (p.createdAt = :cursorCreatedAt and p.id < :cursorId)
+      )
+    order by p.createdAt desc, p.id desc
+    """,
+)
+fun pageBy(
+    @Param("partnerId") partnerId: Long?,
+    @Param("status") status: String?,
+    @Param("fromAt") fromAt: Instant?,
+    @Param("toAt") toAt: Instant?,
+    @Param("cursorCreatedAt") cursorCreatedAt: Instant?,
+    @Param("cursorId") cursorId: Long?,
+    org: org.springframework.data.domain.Pageable,
+): List<PaymentEntity>
+```
+
+### limit+1 로딩 및 nextCursor 생성
+```kotlin
+val pageSize = query.limit
+val list = repo.pageBy(
+    partnerId = query.partnerId,
+    status = query.status?.name,
+    fromAt = query.from?.toInstant(ZoneOffset.UTC),
+    toAt = query.to?.toInstant(ZoneOffset.UTC),
+    cursorCreatedAt = query.cursorCreatedAt?.toInstant(ZoneOffset.UTC),
+    cursorId = query.cursorId,
+    org = PageRequest.of(0, pageSize + 1),
+)
+val hasNext = list.size > pageSize
+val items = list.take(pageSize)
+val last = items.lastOrNull()
+return PaymentPage(
+    items = items.map { it.toDomain() },
+    hasNext = hasNext,
+    nextCursorCreatedAt = last?.createdAt?.let { LocalDateTime.ofInstant(it, ZoneOffset.UTC) },
+    nextCursorId = last?.id,
+)
+```
+
+### 커서 인코딩/디코딩 (Base64 URL-safe)
+```kotlin
+private fun encodeCursor(createdAt: Instant?, id: Long?): String? {
+    if (createdAt == null || id == null) return null
+    val raw = "${createdAt.toEpochMilli()}:$id"
+    return Base64.getUrlEncoder().withoutPadding().encodeToString(raw.toByteArray())
+}
+
+private fun decodeCursor(cursor: String?): Pair<Instant?, Long?> {
+    if (cursor.isNullOrBlank()) return null to null
+    return try {
+        val raw = String(Base64.getUrlDecoder().decode(cursor))
+        val parts = raw.split(":")
+        val ts = parts[0].toLong()
+        val id = parts[1].toLong()
+        Instant.ofEpochMilli(ts) to id
+    } catch (e: Exception) {
+        null to null
+    }
+}
+```
+
+### API 응답 필드 (nextCursor/hasNext 포함)
+```kotlin
+data class PaymentsResponse(
+    val items: List<PaymentItemDto>,
+    val summary: SummaryDto,
+    val nextCursor: String?,
+    val hasNext: Boolean,
+)
 ```
 
 ---
 
 ## 4. 빠른 검증 시나리오
 
-**Swagger UI**: [https://hyeonji826.github.io/backend-test-v1/](https://hyeonji826.github.io/backend-test-v1/)
+**Swagger UI (문서 미리보기)**: [https://hyeonji826.github.io/backend-test-v1/](https://hyeonji826.github.io/backend-test-v1/)
 
 아래 값 그대로 사용하면 수수료 2.5% 기준으로 손익 계산이 딱 떨어지며, 목록·취소·중복키까지 한 번에 검증 가능.
 
@@ -112,7 +280,7 @@ curl -X POST http://localhost:8080/api/v1/payments \
 }
 ```
 
-### 4.2 목록/통계 확인 (커서 X)
+### 4.2 목록/통계 확인 (커서 nextCursor)
 
 **넣을 숫자**
 - partnerId=1
@@ -137,8 +305,14 @@ curl "http://localhost:8080/api/v1/payments?partnerId=1&status=APPROVED&limit=5"
     }
   ],
   "summary": { "count": 1, "totalAmount": "20000", "totalNetAmount": "19500" },
+  "nextCursor": null,
   "hasNext": false
 }
+```
+
+**다음 페이지 조회 (예시)**
+```bash
+curl "http://localhost:8080/api/v1/payments?partnerId=1&status=APPROVED&limit=5&cursor={여기에_nextCursor_값}"
 ```
 
 ### 4.3 부분 취소 (5,000원)
