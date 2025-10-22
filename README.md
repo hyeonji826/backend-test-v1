@@ -243,6 +243,115 @@ data class PaymentsResponse(
 
 ---
 
+## 3.6 추가 제휴사 연동(어댑터) 및 전략 선택
+
+### 런타임 전략 선택 (파트너 기반)
+```26:45:modules/application/src/main/kotlin/im/bigs/pg/application/payment/service/PaymentService.kt
+        val pgClient =
+            pgClients.firstOrNull { it.supports(partner.id) }
+                ?: throw IllegalStateException("No PG client supports partner ${partner.id}")
+
+        val approve =
+            pgClient.approve(
+                PgApproveRequest(
+                    partnerId = partner.id,
+                    amount = command.amount,
+                    cardBin = command.cardBin,
+                    cardLast4 = command.cardLast4,
+                    productName = command.productName,
+                ),
+            )
+```
+
+### 어댑터 등록과 우선순위/지원 범위
+```21:33:modules/external/pg-client/src/main/kotlin/im/bigs/pg/external/pg/TestPgClient.kt
+@Component
+@Order(1)
+class TestPgClient(
+    private val rest: RestTemplate,
+    @Value("${'$'}{pg.test.base-url:${'$'}{PG_BASE_URL:http://localhost:18080}}") private val baseUrl: String,
+    @Value("${'$'}{pg.test.api-key:${'$'}{PG_API_KEY:test-api-key}}") private val apiKey: String,
+): PgClientOutPort {
+    override fun supports(partnerId: Long): Boolean = true
+```
+
+```16:21:modules/external/pg-client/src/main/kotlin/im/bigs/pg/external/pg/MockPgClient.kt
+@Component
+@org.springframework.core.annotation.Order(2)
+class MockPgClient : PgClientOutPort {
+    override fun supports(partnerId: Long): Boolean = partnerId % 2L == 1L
+```
+
+---
+
+## 3.7 오픈API 문서화 및 운영지표(Actuator)
+
+### 의존성 추가 (springdoc + actuator)
+```18:21:modules/bootstrap/api-payment-gateway/build.gradle.kts
+    implementation("org.springframework.boot:spring-boot-starter-actuator")
+    implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.6.0")
+```
+
+### 설정 (springdoc)
+```18:23:modules/bootstrap/api-payment-gateway/src/main/resources/application.yml
+springdoc:
+  api-docs:
+    enabled: true
+  swagger-ui:
+    enabled: true
+    # Use default path (/swagger-ui/index.html); leaving path unset to avoid 404s
+```
+
+---
+
+## 3.8 MariaDB 전환(docker-compose) 및 초기 스키마 적용
+
+### Docker Compose (MariaDB 서비스 + 앱 연동)
+```1:13:docker-compose.yml
+services:
+  mariadb:
+    image: mariadb:10.11
+    container_name: mariadb
+    restart: always
+    environment:
+      MARIADB_ROOT_PASSWORD: root-pass
+      MARIADB_DATABASE: appdb
+      MARIADB_USER: appuser
+      MARIADB_PASSWORD: app-pass
+    ports:
+      - "3306:3306"
+```
+
+```44:47:docker-compose.yml
+      SPRING_DATASOURCE_URL: jdbc:mariadb://mariadb:3306/appdb
+      SPRING_DATASOURCE_USERNAME: appuser
+      SPRING_DATASOURCE_PASSWORD: app-pass
+```
+
+### 애플리케이션 데이터소스/초기 스키마 로드
+```4:9:modules/bootstrap/api-payment-gateway/src/main/resources/application.yml
+spring:
+  datasource:
+    url: jdbc:mariadb://localhost:3306/appdb?useSSL=false&allowPublicKeyRetrieval=true
+    username: appuser
+    password: app-pass
+    driver-class-name: org.mariadb.jdbc.Driver
+```
+
+```10:16:modules/bootstrap/api-payment-gateway/src/main/resources/application.yml
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:schema.sql
+  jpa:
+    hibernate:
+      ddl-auto: none
+```
+
+> 주: 마이그레이션 도구는 간소화를 위해 스키마 초기화(`spring.sql.init`)로 대체했습니다. 면접 상황에서는 Flyway/Liquibase 적용 지점은 위 데이터소스 설정을 기준으로 소개하시면 됩니다.
+
+---
+
 ## 4. 빠른 검증 시나리오
 
 **Swagger UI (문서 미리보기)**: [https://hyeonji826.github.io/backend-test-v1/](https://hyeonji826.github.io/backend-test-v1/)
